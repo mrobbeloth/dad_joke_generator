@@ -162,7 +162,7 @@ Items:
 - [ ] MS10: Ops SNS topic subscription confirmed by the site-owner email recipient
 - [ ] MS11: Training_Corpus S3 bucket populated with curated source files (only after `training_corpus_rights_confirmed` is flipped to `true` in this document)
 - [ ] MS12: Deployment IAM role or user created with least-privilege policies for Bedrock, Polly, Comprehend, DynamoDB, S3, SSM, CloudWatch
-- [ ] MS13: GitHub project board created with exactly five columns: Backlog, In Progress, In Review, In Production, Done (R13.1)
+- [x] MS13: GitHub project board created with exactly five columns: Backlog, In Progress, In Review, In Production, Done (R13.1) (2026-05-21)
 - [ ] MS14: GitHub branch protection enabled on `main` to require Production_Gate checks on every pull request (R13.3, R13.7)
 - [x] MS15: GitHub Actions repository secrets configured (deployment role ARN, Bedrock-region, custom-domain hosted-zone id) (2026-05-21)
 
