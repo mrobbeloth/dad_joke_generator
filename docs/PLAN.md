@@ -153,7 +153,7 @@ Items:
 - [x] MS01: Repository initialized and committed to GitHub (2026-05-17)
 - [x] MS02: AWS account created and root MFA enabled (2026-05-17)
 - [ ] MS03: Billing alert configured at the cost threshold recorded in `/dadjokes/cost_alarm_threshold_usd`
-- [ ] MS04: Bedrock model access requested and approved for `amazon.nova-lite-v1:0` in `us-east-1`
+- [x] MS04: Bedrock model access requested and approved for `amazon.nova-lite-v1:0` in `us-east-1` (2026-05-21)
 - [ ] MS05: Custom domain registered or delegated to AWS Route 53 hosted zone
 - [ ] MS06: ACM certificate requested for the Custom_Domain and DNS validation completed
 - [ ] MS07: SSM SecureString parameter `/dadjokes/ip_hash_salt` set to 32 or more random bytes via `aws ssm put-parameter --type SecureString`
