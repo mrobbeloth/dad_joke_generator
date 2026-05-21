@@ -156,7 +156,7 @@ Items:
 - [x] MS04: Bedrock model access requested and approved for `amazon.nova-lite-v1:0` in `us-east-1` (2026-05-21)
 - [ ] MS05: Custom domain registered or delegated to AWS Route 53 hosted zone
 - [ ] MS06: ACM certificate requested for the Custom_Domain and DNS validation completed
-- [ ] MS07: SSM SecureString parameter `/dadjokes/ip_hash_salt` set to 32 or more random bytes via `aws ssm put-parameter --type SecureString`
+- [x] MS07: SSM SecureString parameter `/dadjokes/ip_hash_salt` set to 32 or more random bytes via `aws ssm put-parameter --type SecureString` (2026-05-21)
 - [ ] MS08: SES domain verification completed for the cost-alert and ops-alert sender address
 - [ ] MS09: Cost SNS topic subscription confirmed by the site-owner email recipient
 - [ ] MS10: Ops SNS topic subscription confirmed by the site-owner email recipient
