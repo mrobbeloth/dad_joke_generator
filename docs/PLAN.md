@@ -161,7 +161,7 @@ Items:
 - [ ] MS09: Cost SNS topic subscription confirmed by the site-owner email recipient
 - [ ] MS10: Ops SNS topic subscription confirmed by the site-owner email recipient
 - [ ] MS11: Training_Corpus S3 bucket populated with curated source files (only after `training_corpus_rights_confirmed` is flipped to `true` in this document)
-- [ ] MS12: Deployment IAM role or user created with least-privilege policies for Bedrock, Polly, Comprehend, DynamoDB, S3, SSM, CloudWatch
+- [ ] MS12: Deployment IAM role or user created with least-privilege policies for Bedrock, Polly, Comprehend, DynamoDB, S3, SSM, CloudWatch _(deferred 2026-05-21: the GitHub Actions deploy role `dadjokes-github-deploy` currently has `AdministratorAccess` from bootstrap. The Lambda execution role created by `infra/terraform/iam.tf` is **already** least-privilege (10 documented Sids, all services scoped). The deploy role narrow-down is intentionally deferred to **after the first end-to-end production apply**, when IAM Access Analyzer can generate a least-privilege policy from the real CloudTrail events of that deploy. See `infra/terraform-bootstrap/README.md` "Narrowing the deploy role after first apply" for the runbook.)_
 - [x] MS13: GitHub project board created with exactly five columns: Backlog, In Progress, In Review, In Production, Done (R13.1) (2026-05-21)
 - [x] MS14: GitHub branch protection enabled on `main` to require Production_Gate checks on every pull request (R13.3, R13.7) (2026-05-21)
 - [x] MS15: GitHub Actions repository secrets configured (deployment role ARN, Bedrock-region, custom-domain hosted-zone id) (2026-05-21)
