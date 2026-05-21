@@ -1,0 +1,70 @@
+# Curated denylist for the layered Input/Output moderator (R3.3, Property 9).
+#
+# Format:
+#   - One entry per line (UTF-8).
+#   - Lines beginning with '#' are comments.
+#   - Blank lines are ignored.
+#   - Each non-comment line must be a single token (no whitespace).
+#   - Matching is case-insensitive and word-boundary aware (see
+#     denylist_matcher.matches).
+#
+# Scope:
+#   This file is intentionally short. It serves as a fast, deterministic
+#   tripwire for obvious offenders; the long tail of toxic content is
+#   handled by Amazon Comprehend's DetectToxicContent in the same
+#   moderator pipeline. Real production deployments MUST expand and
+#   review this list per R3.3 (profanity, sexual content, slurs, drug
+#   references, graphic violence, targeted harassment) and re-review on
+#   a regular cadence.
+#
+# Note:
+#   Actual slur text is intentionally NOT included in the repository.
+#   The placeholders below exercise the matcher's logic without
+#   requiring real slurs to live in source control.
+
+# Profanity (placeholder stems)
+damn
+hell
+crap
+bastard
+bitch
+ass
+asshole
+shit
+fuck
+fucker
+fucking
+piss
+
+# Sexual content (placeholders)
+sex
+sexy
+porn
+porno
+nude
+naked
+erotic
+
+# Slurs (placeholders only)
+slur
+slurword
+
+# Drug references
+cocaine
+heroin
+meth
+weed
+marijuana
+stoned
+
+# Graphic violence
+murder
+stab
+rape
+bloody
+kill
+
+# Targeted harassment placeholders
+loser
+idiot
+moron

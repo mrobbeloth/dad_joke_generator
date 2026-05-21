@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Generate a family-friendly dad joke from optional seed words." />
+    <title>Dad Joke Generator</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to main content</a>
+
+    <header class="site-header" role="banner">
+      <h1 class="site-title">Dad Joke Generator</h1>
+      <p class="site-tagline">Family-friendly corny jokes on demand.</p>
+    </header>
+
+    <main id="main" class="site-main" role="main">
+      <!-- Ad slot (populated by ad_module.ts only when the feature flag is enabled). -->
+      <div id="ad-slot" class="ad-slot" aria-label="Advertisement"></div>
+
+      <section class="generator" aria-labelledby="generator-heading">
+        <h2 id="generator-heading" class="visually-hidden">Generate a joke</h2>
+
+        <form id="joke-form" class="joke-form" novalidate>
+          <div class="form-row">
+            <label for="seed-input" class="form-label">
+              Seed words
+              <span class="form-hint" id="seed-hint">
+                Optional. 1 to 50 characters. Letters, digits, hyphens, apostrophes, and spaces.
+              </span>
+            </label>
+            <input
+              type="text"
+              id="seed-input"
+              name="seed-input"
+              class="form-input"
+              minlength="1"
+              maxlength="50"
+              autocomplete="off"
+              spellcheck="true"
+              aria-describedby="seed-hint seed-error"
+              placeholder="pickle engineer"
+            />
+            <p id="seed-error" class="form-error" role="alert" aria-live="polite" hidden></p>
+          </div>
+
+          <div class="form-row form-actions">
+            <button type="submit" id="generate-btn" class="btn btn-primary">
+              Generate
+            </button>
+            <span
+              id="progress"
+              class="progress"
+              role="status"
+              aria-live="polite"
+              aria-label="Generating a joke"
+              hidden
+            >
+              <span class="spinner" aria-hidden="true"></span>
+              <span class="progress-text">Generating&hellip;</span>
+            </span>
+          </div>
+
+          <div class="form-row remaining-row">
+            <span
+              id="remaining-badge"
+              class="remaining-badge"
+              aria-label="Generations remaining today"
+              hidden
+            >
+              <span class="remaining-label">Remaining today:</span>
+              <span id="remaining-count" class="remaining-count">&mdash;</span>
+            </span>
+          </div>
+        </form>
+      </section>
+
+      <section class="result" aria-labelledby="result-heading">
+        <h2 id="result-heading" class="visually-hidden">Joke result</h2>
+
+        <p
+          id="error-message"
+          class="error-message"
+          role="alert"
+          aria-live="assertive"
+          hidden
+        ></p>
+
+        <div
+          id="joke-display"
+          class="joke-display"
+          role="region"
+          aria-live="polite"
+          aria-atomic="true"
+          aria-label="Generated joke"
+          hidden
+        >
+          <p id="joke-text" class="joke-text"></p>
+          <div id="audio-controls" class="audio-controls" hidden>
+            <audio
+              id="joke-audio"
+              class="joke-audio"
+              controls
+              preload="none"
+              aria-label="Listen to the joke"
+            >
+              Your browser does not support the audio element.
+            </audio>
+            <button type="button" id="replay-btn" class="btn btn-secondary">
+              Replay
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer" role="contentinfo">
+      <p class="footer-note">
+        All jokes are AI-generated and screened for family-friendly (G/PG) content.
+      </p>
+    </footer>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

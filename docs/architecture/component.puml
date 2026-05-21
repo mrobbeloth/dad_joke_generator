@@ -1,0 +1,106 @@
+@startuml component
+title Dad Joke Generator - Component View
+' Authoritative component view; mirrors design.md "High-Level Component View".
+' Renders with the official plantuml/plantuml Docker image.
+
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam wrapWidth 200
+skinparam ArrowColor #444444
+skinparam component {
+  BackgroundColor #FAFAFA
+  BorderColor #444444
+}
+skinparam database {
+  BackgroundColor #FFF4E6
+  BorderColor #B36B00
+}
+skinparam cloud {
+  BackgroundColor #EAF3FF
+  BorderColor #1F5FA8
+}
+
+actor "Visitor\n(Browser)" as User
+
+cloud "AWS us-east-1" {
+
+  package "Edge / Delivery" as Edge {
+    [CloudFront\n(Distribution + ACM TLS)] as CF
+    [Route 53\nHosted Zone] as R53
+    [API Gateway\nHTTP API] as APIGW
+  }
+
+  database "S3: spa-assets\n(static SPA)" as S3SPA
+
+  package "Joke_API (Lambda - Python 3.12)" as Lambda {
+    [request_validator] as RV
+    [client_ip] as CIP
+    [rate_limiter] as RL
+    [input_moderator] as IM
+    [joke_generator] as JG
+    [output_moderator] as OM
+    [voice_synthesizer] as VS
+    [joke_store] as JS
+    [response_builder] as RB
+    [observability] as OBS
+  }
+
+  package "AWS AI Services" as AI {
+    [Amazon Bedrock\n(Converse API)] as Bedrock
+    [Amazon Comprehend\n(DetectToxicContent)] as Comprehend
+    [Amazon Polly\n(SynthesizeSpeech)] as Polly
+  }
+
+  database "DynamoDB: dadjokes\n(rate-limit + joke records, TTL)" as DDB
+  database "S3: audio\n(MP3, 30d lifecycle)" as S3Audio
+  database "S3: training-corpus\n(private, few-shot)" as S3Corpus
+
+  [SSM Parameter Store\n(daily_limit, model_id, voice_id,\nad flag, ip_hash_salt)] as SSM
+
+  package "Observability" as Obs {
+    [CloudWatch Logs] as CWL
+    [CloudWatch Metrics] as CWM
+    [CloudWatch Alarms] as CWA
+    queue "SNS: cost" as SNSCost
+    queue "SNS: ops" as SNSOps
+  }
+}
+
+' --- Edge / SPA delivery ---
+User -down-> CF : HTTPS\n(Custom_Domain)
+R53 -down-> CF : DNS A/AAAA
+R53 -down-> APIGW : DNS (api.<domain>)
+CF -down-> S3SPA : SPA assets (OAC)
+CF -down-> APIGW : /v1/* (origin)
+APIGW -down-> Lambda : invoke
+
+' --- Lambda internal pipeline (handler.py composition order) ---
+RV -right-> CIP
+CIP -right-> RL
+RL  -right-> IM
+IM  -right-> JG
+JG  -right-> OM
+OM  -down->  VS
+VS  -right-> JS
+JS  -right-> RB
+RB  -up->   APIGW : HTTP response
+
+' --- Lambda outbound calls to AWS services ---
+RL  --> DDB       : atomic UpdateItem
+JS  --> DDB       : PutItem (TTL 90d)
+IM  --> Comprehend : DetectToxicContent\n(3s budget)
+OM  --> Comprehend : DetectToxicContent\n(500ms budget)
+JG  --> Bedrock    : Converse\n(15s budget, up to 3 attempts)
+JG  --> S3Corpus   : few-shot prompt examples
+VS  --> Polly      : SynthesizeSpeech\n(10s budget)
+VS  --> S3Audio    : Put MP3 + presigned GET (15 min)
+Lambda --> SSM     : GetParameters (cached)
+
+' --- Observability ---
+OBS --> CWL : structured JSON logs
+OBS --> CWM : custom metrics
+CWM --> CWA
+CWA --> SNSCost : [COST-ALERT]
+CWA --> SNSOps  : ops alerts
+
+@enduml

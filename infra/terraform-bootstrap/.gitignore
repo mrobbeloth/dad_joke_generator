@@ -1,0 +1,20 @@
+# Local Terraform state for the bootstrap module. The bootstrap module
+# cannot store its state in the S3 bucket it provisions, so its state
+# lives locally. Never commit it.
+terraform.tfstate
+terraform.tfstate.backup
+*.tfstate
+*.tfstate.*
+
+# Plan files
+*.plan
+*.tfplan
+bootstrap_outputs.json
+
+# Terraform provider download / module cache
+.terraform/
+.terraform.lock.hcl
+
+# tfvars (operator overrides; never commit credentials or account ids)
+*.tfvars
+!example.tfvars

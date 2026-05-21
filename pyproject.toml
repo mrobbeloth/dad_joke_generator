@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "joke_api"
+version = "0.1.0"
+description = "Joke_API: AWS Lambda backend for the Dad Joke Generator."
+readme = "README.md"
+requires-python = "==3.12.*"
+license = { text = "Proprietary" }
+authors = [{ name = "Dad Joke Generator Team" }]
+
+# Runtime dependencies. Pinned to specific versions so the Lambda build,
+# CI runs, and local developer environments resolve to the same wheels.
+dependencies = [
+    "boto3==1.35.49",
+]
+
+[project.optional-dependencies]
+# Test-only dependencies. Pinned for reproducible CI runs.
+test = [
+    "pytest==8.3.3",
+    "hypothesis==6.115.5",
+    "moto==5.0.20",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+addopts = "-ra"

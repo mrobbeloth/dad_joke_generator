@@ -1,0 +1,114 @@
+@startuml deployment
+title Dad Joke Generator - AWS Deployment View
+' Authoritative deployment view; mirrors design.md "Deployment View".
+' Region: AWS us-east-1 (single-account, single-region for Phase 1).
+
+skinparam shadowing false
+skinparam wrapWidth 200
+skinparam ArrowColor #444444
+skinparam node {
+  BackgroundColor #FAFAFA
+  BorderColor #444444
+}
+skinparam database {
+  BackgroundColor #FFF4E6
+  BorderColor #B36B00
+}
+skinparam cloud {
+  BackgroundColor #EAF3FF
+  BorderColor #1F5FA8
+}
+skinparam queue {
+  BackgroundColor #F3E8FF
+  BorderColor #6B21A8
+}
+
+actor "Visitor\n(Browser)" as User
+
+cloud "AWS Account: dad-joke-generator (us-east-1)" as AWS {
+
+  node "Route 53" as R53 {
+    [Hosted Zone\n<custom_domain>]
+  }
+
+  node "AWS Certificate Manager" as ACM {
+    [TLS cert for\n<custom_domain> + api.<custom_domain>]
+  }
+
+  node "CloudFront" as CF {
+    [Distribution\n(SPA origin + /v1/* origin)]
+  }
+
+  database "S3 bucket: spa-assets\n(BlockPublicAccess=ALL,\nOAC read by CloudFront)" as S3SPA
+  database "S3 bucket: audio\n(BlockPublicAccess=ALL,\n30d lifecycle, presigned GETs)" as S3Audio
+  database "S3 bucket: training-corpus\n(BlockPublicAccess=ALL,\nLambda role read-only)" as S3Corpus
+
+  node "API Gateway\nHTTP API: api.<custom_domain>" as APIGW {
+    [Routes: POST /v1/jokes,\nGET /v1/jokes/{id},\nGET /v1/config, GET /v1/health]
+  }
+
+  node "Lambda: joke-api\n(Python 3.12, arm64)" as Lambda {
+    [handler.lambda_handler]
+  }
+
+  database "DynamoDB table: dadjokes\n(PAY_PER_REQUEST, TTL=expires_at)" as DDB
+
+  node "SSM Parameter Store" as SSM {
+    [/dadjokes/daily_limit]
+    [/dadjokes/bedrock_model_id]
+    [/dadjokes/polly_voice_id]
+    [/dadjokes/ad_module_enabled]
+    [/dadjokes/ad_network_id]
+    [/dadjokes/ip_hash_salt (SecureString)]
+    [/dadjokes/cost_alarm_threshold_usd]
+  }
+
+  node "Amazon Bedrock" as Bedrock {
+    [Converse API\n(model from SSM)]
+  }
+
+  node "Amazon Comprehend" as Comprehend {
+    [DetectToxicContent\n(en)]
+  }
+
+  node "Amazon Polly" as Polly {
+    [SynthesizeSpeech\n(standard voice, mp3)]
+  }
+
+  node "CloudWatch" as CW {
+    [Log Group:\n/aws/lambda/joke-api]
+    [Custom Metrics +\nAlarms (cost, ops)]
+  }
+
+  queue "SNS topic: cost-alerts" as SNSCost
+  queue "SNS topic: ops-alerts"  as SNSOps
+}
+
+' --- Public ingress ---
+User -down-> R53 : DNS lookup
+User -down-> CF  : HTTPS (TLS via ACM)
+R53 -right-> CF  : alias A/AAAA
+R53 -right-> APIGW : alias (api.<custom_domain>)
+ACM -down-> CF
+ACM -down-> APIGW
+
+' --- SPA + API plane ---
+CF -down-> S3SPA : OAC (SPA assets)
+CF -down-> APIGW : /v1/* origin
+APIGW -down-> Lambda : invoke
+
+' --- Lambda outbound (IAM role: dadjokes-lambda-role) ---
+Lambda --> SSM        : GetParameters
+Lambda --> DDB        : UpdateItem / PutItem / GetItem
+Lambda --> Bedrock    : Converse (15s)
+Lambda --> Comprehend : DetectToxicContent (3s / 500ms)
+Lambda --> Polly      : SynthesizeSpeech (10s)
+Lambda --> S3Audio    : PutObject + presign (15 min)
+Lambda --> S3Corpus   : GetObject (read-only)
+Lambda --> CW         : logs + metrics
+
+' --- Alarming ---
+CW --> SNSCost : Estimated_Charges > threshold
+CW --> SNSOps  : 5xx / latency / throttle alarms
+
+@enduml

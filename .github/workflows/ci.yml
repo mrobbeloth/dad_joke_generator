@@ -1,0 +1,405 @@
+# .github/workflows/ci.yml
+#
+# Build_Pipeline + Production_Gate CI for the Dad Joke Generator.
+#
+# Implements (see .kiro/specs/dad-joke-generator/requirements.md):
+#   R10.4 / R10.5 - PlantUML rendering on every build, artifacts retained
+#   R11.3         - PLAN.md and TEST_PLAN.md presence verified within 10 s
+#   R11.4         - commit hash + last-modified ISO 8601 UTC logged for both docs
+#   R11.5         - missing commit/timestamp aborts the build (no partial values)
+#   R11.6         - PLAN/TEST_PLAN freshness check (delegated to production_gate doc-freshness gate)
+#   R12.1 - R12.6 - Production_Gate aggregate gates run before deploy
+#   R13.3 / R13.7 - PR-targeting workflow runs all Production_Gate checks
+#
+# Required GitHub Actions configuration (see comment block at bottom):
+#   secrets.AWS_ROLE_ARN, vars.AWS_REGION, vars.SPA_ASSETS_BUCKET,
+#   vars.CLOUDFRONT_DISTRIBUTION_ID
+
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel duplicate PR runs but never cancel a main-branch deploy mid-flight.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+# id-token: write is required for OIDC role assumption in the deploy job.
+permissions:
+  contents: read
+  id-token: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Job 1: verify-plan-docs (R11.3, R11.4, R11.5)
+  # -------------------------------------------------------------------------
+  verify-plan-docs:
+    name: Verify PLAN.md / TEST_PLAN.md (R11.3-R11.5)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout (full history for git log timestamps)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify presence of PLAN.md and TEST_PLAN.md (R11.3, 10 s budget)
+        run: |
+          set -euo pipefail
+          start=$(date +%s)
+          missing=()
+          for f in docs/PLAN.md docs/TEST_PLAN.md; do
+            if [[ ! -f "$f" ]]; then
+              missing+=("$f")
+            fi
+          done
+          elapsed=$(( $(date +%s) - start ))
+          if (( elapsed > 10 )); then
+            echo "ERROR: presence check exceeded the 10 s budget (R11.3): ${elapsed}s" >&2
+            exit 1
+          fi
+          if (( ${#missing[@]} > 0 )); then
+            echo "ERROR: required governance file(s) missing (R11.3): ${missing[*]}" >&2
+            exit 1
+          fi
+          echo "PLAN.md and TEST_PLAN.md present (presence check: ${elapsed}s)."
+
+      - name: Log commit hash + last-modified ISO 8601 UTC for both docs (R11.4, R11.5)
+        run: |
+          set -euo pipefail
+          # Single atomic step (R11.4): collect every value before printing
+          # any of them. Any failure short-circuits with no partial output
+          # written to stdout (R11.5).
+          set +e
+          plan_hash=$(git log -1 --format=%H -- docs/PLAN.md)
+          plan_rc=$?
+          plan_iso=$(git log -1 --date=iso-strict --format=%cI -- docs/PLAN.md)
+          plan_iso_rc=$?
+          tp_hash=$(git log -1 --format=%H -- docs/TEST_PLAN.md)
+          tp_rc=$?
+          tp_iso=$(git log -1 --date=iso-strict --format=%cI -- docs/TEST_PLAN.md)
+          tp_iso_rc=$?
+          set -e
+
+          fail=0
+          if [[ $plan_rc -ne 0 || -z "${plan_hash}" ]]; then
+            echo "ERROR: could not obtain commit hash for docs/PLAN.md (R11.5)" >&2
+            fail=1
+          fi
+          if [[ $plan_iso_rc -ne 0 || -z "${plan_iso}" ]]; then
+            echo "ERROR: could not obtain last-modified ISO 8601 UTC for docs/PLAN.md (R11.5)" >&2
+            fail=1
+          fi
+          if [[ $tp_rc -ne 0 || -z "${tp_hash}" ]]; then
+            echo "ERROR: could not obtain commit hash for docs/TEST_PLAN.md (R11.5)" >&2
+            fail=1
+          fi
+          if [[ $tp_iso_rc -ne 0 || -z "${tp_iso}" ]]; then
+            echo "ERROR: could not obtain last-modified ISO 8601 UTC for docs/TEST_PLAN.md (R11.5)" >&2
+            fail=1
+          fi
+          if (( fail )); then
+            exit 1
+          fi
+
+          # Normalize to UTC (Z suffix) for the build log (R11.4).
+          plan_utc=$(date -u -d "${plan_iso}" +%Y-%m-%dT%H:%M:%SZ)
+          tp_utc=$(date -u -d "${tp_iso}" +%Y-%m-%dT%H:%M:%SZ)
+
+          # Single atomic block in the build log.
+          {
+            echo "=== Governance documents (R11.4) ==="
+            echo "docs/PLAN.md       commit=${plan_hash} last-modified-utc=${plan_utc}"
+            echo "docs/TEST_PLAN.md  commit=${tp_hash} last-modified-utc=${tp_utc}"
+          }
+
+          # Mirror to the workflow summary so reviewers can see it without scrolling.
+          {
+            echo "## Governance documents (R11.4)"
+            echo ""
+            echo "| File | Commit | Last modified (UTC) |"
+            echo "| --- | --- | --- |"
+            echo "| docs/PLAN.md | \`${plan_hash}\` | ${plan_utc} |"
+            echo "| docs/TEST_PLAN.md | \`${tp_hash}\` | ${tp_utc} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # -------------------------------------------------------------------------
+  # Job 2: governance-gates (R11.6, R12.1, R12.5, R12.6, R13.3, R13.7, R14.2/3, R15.6)
+  # -------------------------------------------------------------------------
+  governance-gates:
+    name: Production_Gate aggregate (R12)
+    runs-on: ubuntu-latest
+    needs: verify-plan-docs
+    timeout-minutes: 10
+    steps:
+      - name: Checkout (full history for doc-freshness gate)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install project with test extras
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[test]"
+
+      - name: Resolve branch under test
+        id: branch
+        run: |
+          # On pull_request runs, GITHUB_HEAD_REF is the source branch;
+          # on push runs, fall back to the ref name. The branch-name gate
+          # (R13.2) is run against the feature branch, not the merge ref.
+          branch="${GITHUB_HEAD_REF:-${GITHUB_REF##*/}}"
+          echo "branch=${branch}" >> "$GITHUB_OUTPUT"
+          echo "Branch under gate evaluation: ${branch}"
+
+      - name: Run Production_Gate (--all, JSON report, no PlantUML render)
+        id: gate
+        run: |
+          # The render-plantuml gate has its own dedicated job below
+          # (--no-render-plantuml here avoids running it twice).
+          python scripts/production_gate.py \
+            --all \
+            --report-format=json \
+            --out=production_gate_report.json \
+            --self-health-out=production_gate_self_health.json \
+            --no-render-plantuml \
+            --branch="${{ steps.branch.outputs.branch }}"
+
+      - name: Upload Production_Gate report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-gate-report
+          path: |
+            production_gate_report.json
+            production_gate_self_health.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  # -------------------------------------------------------------------------
+  # Job 3: tests (R11.4, R12.1)
+  # -------------------------------------------------------------------------
+  tests:
+    name: Tests (${{ matrix.suite }})
+    runs-on: ubuntu-latest
+    needs: verify-plan-docs
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [unit, property, integration, smoke]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install project with test extras
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[test]"
+
+      - name: Run pytest (${{ matrix.suite }})
+        run: |
+          python -m pytest "tests/${{ matrix.suite }}" -v \
+            --junitxml="pytest-${{ matrix.suite }}.xml"
+
+      - name: Upload junit-xml report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-${{ matrix.suite }}-junit
+          path: pytest-${{ matrix.suite }}.xml
+          if-no-files-found: warn
+          retention-days: 30
+
+  # -------------------------------------------------------------------------
+  # Job 4: frontend (R7.x)
+  # -------------------------------------------------------------------------
+  frontend:
+    name: Frontend (typecheck + build)
+    runs-on: ubuntu-latest
+    needs: verify-plan-docs
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+        working-directory: web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck (tsc --noEmit)
+        run: npm run typecheck
+
+      - name: Build SPA
+        # web/package.json does not yet declare a `build` script (Phase 1
+        # ships a vanilla TypeScript SPA whose tsconfig.json already sets
+        # outDir=./dist). Compile directly with the locally pinned tsc so
+        # the build is reproducible without modifying web/package.json.
+        run: npx --no-install tsc
+
+      - name: Run frontend tests (vitest, if any are present)
+        # `npm test --if-present` would still run on the existing `test`
+        # script; we instead use --passWithNoTests-style behaviour by
+        # discovering test files first so missing tests don't fail the job.
+        run: |
+          if find . -path ./node_modules -prune -o \
+                  \( -name "*.test.ts" -o -name "*.spec.ts" \) -print \
+               | grep -q .; then
+            npm test
+          else
+            echo "No frontend tests found; skipping."
+          fi
+
+      - name: Upload SPA build artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spa-dist
+          path: web/dist
+          if-no-files-found: error
+          retention-days: 30
+
+  # -------------------------------------------------------------------------
+  # Job 5: render-plantuml (R10.4, R10.5, R12.4)
+  # -------------------------------------------------------------------------
+  render-plantuml:
+    name: Render PlantUML diagrams (R10.4-R10.5)
+    runs-on: ubuntu-latest
+    needs: verify-plan-docs
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Render PlantUML sources (Docker plantuml/plantuml)
+        run: bash scripts/render_plantuml.sh
+
+      - name: Upload rendered diagrams (R10.5 - retained 30 days)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: architecture-diagrams
+          path: |
+            docs/architecture/**/*.png
+            docs/architecture/**/*.svg
+          if-no-files-found: warn
+          retention-days: 30
+
+  # -------------------------------------------------------------------------
+  # Job 6: deploy (gated; only runs after every gate above passes)
+  # -------------------------------------------------------------------------
+  deploy:
+    name: Deploy to production (main only)
+    runs-on: ubuntu-latest
+    needs: [governance-gates, tests, frontend, render-plantuml]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    timeout-minutes: 20
+    environment: production
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      SPA_ASSETS_BUCKET: ${{ vars.SPA_ASSETS_BUCKET }}
+      CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download SPA build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: spa-dist
+          path: web/dist
+
+      # AWS OIDC role assumption (no long-lived keys). The trust policy on
+      # the role must allow the GitHub OIDC provider for this repo + ref.
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: dad-joke-generator-ci
+
+      # TODO: enable once secrets.AWS_ROLE_ARN, vars.AWS_REGION, and
+      # vars.SPA_ASSETS_BUCKET are wired (task 17.1 ships the workflow;
+      # the AWS account configuration is operator work tracked under MS15).
+      - name: Sync SPA assets to S3 (TODO - requires SPA_ASSETS_BUCKET)
+        if: env.SPA_ASSETS_BUCKET != ''
+        run: |
+          aws s3 sync web/dist "s3://${SPA_ASSETS_BUCKET}" --delete
+
+      - name: Set up Terraform
+        if: env.AWS_REGION != ''
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.9.8'
+
+      # TODO: enable once the Terraform backend (state bucket / dynamodb
+      # lock table) is provisioned per the runbook.
+      - name: Terraform init + apply (TODO - requires backend config)
+        if: env.AWS_REGION != ''
+        working-directory: infra/terraform
+        run: |
+          terraform init -input=false
+          terraform apply -auto-approve -input=false
+
+      # TODO: enable once vars.CLOUDFRONT_DISTRIBUTION_ID is wired.
+      - name: Invalidate CloudFront cache (TODO - requires CLOUDFRONT_DISTRIBUTION_ID)
+        if: env.CLOUDFRONT_DISTRIBUTION_ID != ''
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${CLOUDFRONT_DISTRIBUTION_ID}" \
+            --paths "/*"
+
+# -----------------------------------------------------------------------------
+# Required GitHub Actions configuration
+# -----------------------------------------------------------------------------
+# This workflow expects the following to be configured at the repository (or
+# environment) level before the `deploy` job can run successfully. Until they
+# are wired the deploy job will short-circuit each AWS step via its `if:`
+# guard and the rest of the pipeline (gates, tests, frontend, plantuml) will
+# continue to run on every PR and push.
+#
+# Secrets (Settings -> Secrets and variables -> Actions -> Secrets):
+#   AWS_ROLE_ARN
+#     IAM role ARN to assume via OIDC. The role's trust policy must allow
+#     the GitHub OIDC provider (token.actions.githubusercontent.com) for
+#     this repository and, ideally, restrict by ref to refs/heads/main.
+#
+# Variables (Settings -> Secrets and variables -> Actions -> Variables):
+#   AWS_REGION                  e.g. us-east-1 (matches MS04 / R6 region)
+#   SPA_ASSETS_BUCKET           name of the spa-assets S3 bucket (R7, IaC)
+#   CLOUDFRONT_DISTRIBUTION_ID  CloudFront distribution fronting the SPA
+#
+# Tracked under PLAN.md AWS Manual Setup item MS15
+# (GitHub Actions repository secrets configured).
+# -----------------------------------------------------------------------------

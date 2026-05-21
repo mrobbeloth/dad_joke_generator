@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+.Python
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Test / type-check caches
+.pytest_cache/
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Editor / OS
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Node (web/)
+node_modules/
+web/dist/
+web/.vite/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Terraform (defense-in-depth; per-module .gitignore exists but
+# we never want state, plans, or operator outputs in version control).
+**/.terraform/
+**/.terraform.lock.hcl
+**/terraform.tfstate
+**/terraform.tfstate.*
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfplan
+**/*.plan
+**/bootstrap_outputs.json
+
+# tfvars files often contain account IDs or environment-specific
+# overrides; the example template is allowlisted.
+**/*.tfvars
+!**/example.tfvars
+
+# Playwright per-machine test artifacts.
+web/test-results/
+web/playwright-report/

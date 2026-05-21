@@ -1,0 +1,134 @@
+@startuml sequence
+title Dad Joke Generator - End-to-End Generate Flow
+' Authoritative sequence view; mirrors design.md "Request Flow (Generate)".
+' Covers: validate -> ip resolve -> rate-limit check -> input moderation ->
+' generation loop with output moderation (up to 3 attempts) -> Polly synth ->
+' persist -> rate-limit increment -> response.
+
+autonumber
+
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam ParticipantBackgroundColor #FAFAFA
+skinparam ParticipantBorderColor #444444
+skinparam SequenceLifeLineBorderColor #888888
+skinparam ArrowColor #444444
+
+actor "Visitor" as U
+participant "Frontend (SPA)\nCloudFront + S3" as FE
+participant "API Gateway\nHTTP API" as API
+participant "Joke_API\n(Lambda handler)" as H
+participant "Rate_Limiter\n(DynamoDB)" as RL
+participant "Input_Moderator\n(Comprehend)" as IM
+participant "Joke_Generator\n(Bedrock Converse)" as JG
+participant "Output_Moderator\n(Comprehend)" as OM
+participant "Voice_Synthesizer\n(Polly + S3)" as VS
+participant "Joke_Store\n(DynamoDB)" as JS
+participant "CloudWatch\nLogs/Metrics" as CW
+
+U  -> FE : enter seed words, click Generate
+FE -> API : POST /v1/jokes\n{seedWords[]}
+API -> H : invoke
+
+== Validation & client identification ==
+H -> H : request_validator.validate()\n(R1.7, R3.5, R5.9, R7.5)
+alt validation failure
+  H -> CW : log decision=error
+  H --> API : 400 {error: validation, rule}
+  API --> FE : 400
+  FE --> U : show sanitized error
+else valid
+  H -> H : client_ip.resolve(XFF leftmost)\n(R5.8)
+  H -> H : ip_hashing.sha256_hmac(salt, ip)\n(R16.7)
+
+  == Rate-limit check ==
+  H -> RL : get count for hash(IP) on UTC day
+  RL --> H : current_count
+  alt current_count >= daily_limit
+    H -> CW : log decision=rate_limited
+    H --> API : 429 {resetAtUtc}
+    API --> FE : 429
+    FE --> U : "daily limit reached"
+  else under limit
+
+    == Input moderation (fail closed) ==
+    H -> IM : classify(seedWords)  [3s budget]
+    alt timeout (>3s)
+      IM --> H : ModerationTimeout
+      H -> CW : log decision=error (timeout)
+      H --> API : 504 {moderation_timeout}
+    else transport error
+      IM --> H : ModerationUnavailable
+      H -> CW : log decision=error (unavailable)
+      H --> API : 503 {moderation_unavailable}
+    else not Family_Friendly
+      IM --> H : flagged
+      H -> CW : log decision=moderation_rejected
+      H --> API : 400 {moderation}
+    else Family_Friendly
+      IM --> H : ok
+
+      == Generation loop (up to 3 attempts, R1.4 / R4.2) ==
+      loop attempt in 1..3
+        H -> JG : Converse(seeds, fewShot, refine=attempt>1)
+        alt Bedrock error / >15s
+          JG --> H : error
+          H -> CW : log attempt=N failure
+          H --> API : 503 {unavailable}
+          break
+        else jokeText returned
+          JG --> H : jokeText
+          H -> H : enforce 10..80 words
+          alt out of range
+            note right of H : counts toward 3 attempts (R1.8)
+          else within range
+            H -> OM : classify(jokeText)  [500ms budget]
+            alt OM rejects or unavailable
+              OM --> H : not_family_friendly | unavailable
+              note right of H : refine prompt, retry
+            else OM ok
+              OM --> H : family_friendly
+              break
+            end
+          end
+        end
+      end
+
+      == Fallback after 3 failed attempts ==
+      alt all 3 attempts failed
+        H -> H : pick from FALLBACK_JOKES (>=20)\n(R4.3, R4.5)
+        H -> CW : log moderation_failure entry
+      end
+
+      == Voice synthesis (soft-fail) ==
+      alt 1 <= len(jokeText) <= 1500
+        H -> VS : SynthesizeSpeech(jokeText)  [10s budget]
+        alt Polly success
+          VS -> VS : write MP3 to S3 (audio bucket)
+          VS --> H : presigned URL (>=15 min)
+        else Polly failure / timeout
+          VS --> H : audio_available=false
+        end
+      else jokeText > 1500 chars
+        note right of H : skip Polly (R2.9)\naudio_available=false
+      end
+
+      == Persist + rate-limit increment ==
+      H -> JS : PutItem(joke record, ttl=90d)\n(R18.1, R18.4)
+      alt persist failure
+        JS --> H : error
+        note right of H : soft-fail, log only (R18.5)
+      else persist ok
+        JS --> H : ok
+      end
+      H -> RL : atomic UpdateItem ADD count :one\n(only on success, R5.4 / R5.5)
+      RL --> H : new_count
+      H -> CW : log decision=accepted\n(latency_ms, model_id, voice_id, est_cost_usd)
+      H --> API : 200 {id, text, audioUrl?,\naudioAvailable, remaining, modelId, voiceId}
+      API --> FE : 200
+      FE --> U : render joke + audio controls\n(disable Generate iff remaining==0)
+    end
+  end
+end
+
+@enduml

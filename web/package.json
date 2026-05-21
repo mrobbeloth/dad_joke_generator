@@ -1,0 +1,27 @@
+{
+  "name": "dad-joke-generator-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Dad Joke Generator SPA frontend (TypeScript).",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest --run",
+    "test:watch": "vitest",
+    "test:property": "vitest --run tests/property",
+    "test:component": "vitest --run tests/component",
+    "test:e2e": "playwright test",
+    "build:a11y": "node build_a11y.mjs",
+    "test:a11y": "playwright test --config=playwright.config.ts"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.10.1",
+    "@testing-library/dom": "10.4.0",
+    "fast-check": "3.23.2",
+    "happy-dom": "^15.11.7",
+    "http-server": "^14.1.1",
+    "playwright": "1.49.1",
+    "typescript": "5.6.3",
+    "vitest": "2.1.8"
+  }
+}
