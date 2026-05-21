@@ -168,6 +168,15 @@ jobs:
 
       - name: Run Production_Gate (--all, JSON report, no PlantUML render)
         id: gate
+        env:
+          # Runtime model and voice IDs come from the Configuration
+          # section of docs/PLAN.md. The cost-report gate (R12.6 /
+          # Property 25) checks that Cost_Report's recommendation
+          # matches these values, so a drift between PLAN.md, the
+          # Cost_Report, and CI is what would surface a real
+          # configuration error.
+          RUNTIME_BEDROCK_MODEL_ID: amazon.nova-lite-v1:0
+          RUNTIME_POLLY_VOICE_ID: Joanna
         run: |
           # The render-plantuml gate has its own dedicated job below
           # (--no-render-plantuml here avoids running it twice).
@@ -177,6 +186,7 @@ jobs:
             --out=production_gate_report.json \
             --self-health-out=production_gate_self_health.json \
             --no-render-plantuml \
+            --current-phase="${{ vars.CURRENT_PHASE || '1' }}" \
             --branch="${{ steps.branch.outputs.branch }}"
 
       - name: Upload Production_Gate report artifact
