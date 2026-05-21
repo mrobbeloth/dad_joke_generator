@@ -152,7 +152,7 @@ Items:
 
 - [x] MS01: Repository initialized and committed to GitHub (2026-05-17)
 - [x] MS02: AWS account created and root MFA enabled (2026-05-17)
-- [ ] MS03: Billing alert configured at the cost threshold recorded in `/dadjokes/cost_alarm_threshold_usd`
+- [ ] MS03: Billing alert configured at the cost threshold recorded in `/dadjokes/cost_alarm_threshold_usd` _(deferred 2026-05-21: account 455110962976 is shared in OSU AWS Organization `o-w9mnpf422e`; whole-account budget produces noise from non-dadjokes spend (~$200/month). Tag-scoped budget requires `Project` cost-allocation tag activation at the org level (only the master account `683792142612` can do this). OSU IT emailed 2026-05-21. HCL retained in `infra/terraform-bootstrap/budgets.tf` behind `var.budget_enabled` flag — set to `true` and re-apply once tag is activated.)_
 - [x] MS04: Bedrock model access requested and approved for `amazon.nova-lite-v1:0` in `us-east-1` (2026-05-21)
 - [ ] MS05: Custom domain registered or delegated to AWS Route 53 hosted zone
 - [ ] MS06: ACM certificate requested for the Custom_Domain and DNS validation completed

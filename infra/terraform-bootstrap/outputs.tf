@@ -63,3 +63,28 @@ output "main_module_backend_block" {
     }
   EOT
 }
+
+
+# Budget outputs (MS03). The budget name is stable across applies so
+# operators can find it in the AWS Budgets console. When the budget is
+# disabled (var.budget_enabled = false), `budget_name` resolves to null
+# rather than failing the plan.
+output "budget_enabled" {
+  description = "Whether the dadjokes account-total budget is currently provisioned."
+  value       = var.budget_enabled
+}
+
+output "budget_name" {
+  description = "AWS Budgets resource name for the account-total monthly budget. Null when disabled."
+  value       = try(aws_budgets_budget.account_total[0].name, null)
+}
+
+output "budget_monthly_limit_usd" {
+  description = "Configured monthly budget limit in USD."
+  value       = var.budget_monthly_limit_usd
+}
+
+output "budget_alert_email" {
+  description = "Email address subscribed to budget notifications. Reused by MS08-MS10."
+  value       = var.budget_alert_email
+}

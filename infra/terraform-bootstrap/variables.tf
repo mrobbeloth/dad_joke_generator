@@ -61,3 +61,37 @@ variable "github_deploy_session_name_prefix" {
   type        = string
   default     = "dadjokes-ci"
 }
+
+
+# Budget configuration (MS03). The budget itself lives in budgets.tf;
+# only the email and threshold values are surfaced as variables so an
+# operator can adjust them without editing HCL. The budget is disabled
+# by default — see budgets.tf for the OSU-IT cost-allocation-tag
+# dependency that is blocking re-enablement.
+variable "budget_enabled" {
+  description = "Set to true once OSU IT has activated the Project cost-allocation tag at the org level. See infra/terraform-bootstrap/budgets.tf for context."
+  type        = bool
+  default     = false
+}
+
+variable "budget_alert_email" {
+  description = "Email address that receives AWS Budgets notifications. Same address is reused for MS08-MS10 SES verification and SNS subscriptions."
+  type        = string
+  default     = "robbeloth.1@osu.edu"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$", var.budget_alert_email))
+    error_message = "budget_alert_email must look like a valid email address."
+  }
+}
+
+variable "budget_monthly_limit_usd" {
+  description = "Monthly account-total budget limit in USD. Set above the design's cost_alarm_threshold_usd (10) so the AWS-Budgets early-warning fires before the workload-cost CloudWatch alarm does."
+  type        = number
+  default     = 30
+
+  validation {
+    condition     = var.budget_monthly_limit_usd > 0 && var.budget_monthly_limit_usd <= 1000
+    error_message = "budget_monthly_limit_usd must be between 1 and 1000 USD for the Phase 1 MVP."
+  }
+}
