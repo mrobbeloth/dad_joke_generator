@@ -182,6 +182,14 @@ resource "aws_cloudfront_distribution" "app" {
 
     cache_policy_id            = data.aws_cloudfront_cache_policy.managed_caching_optimized.id
     response_headers_policy_id = aws_cloudfront_response_headers_policy.security_headers.id
+
+    # 301-redirect www.${var.custom_domain} → ${var.custom_domain} (and
+    # any other SANs that are not the canonical apex). See
+    # cloudfront_function.tf for the function definition.
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.host_redirect.arn
+    }
   }
 
   # ----- /v1/* -> API Gateway ----------------------------------------------
@@ -199,6 +207,15 @@ resource "aws_cloudfront_distribution" "app" {
     cache_policy_id            = data.aws_cloudfront_cache_policy.managed_caching_disabled.id
     origin_request_policy_id   = data.aws_cloudfront_origin_request_policy.managed_all_viewer_except_host.id
     response_headers_policy_id = aws_cloudfront_response_headers_policy.security_headers.id
+
+    # Same www → apex redirect on the API path so a request to
+    # www.${var.custom_domain}/v1/jokes redirects to
+    # ${var.custom_domain}/v1/jokes rather than hitting API Gateway
+    # under the wrong host.
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.host_redirect.arn
+    }
   }
 
   # ----- SPA client-side routing fallback ----------------------------------
