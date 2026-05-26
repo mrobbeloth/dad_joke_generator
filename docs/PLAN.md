@@ -157,7 +157,7 @@ Items:
 - [x] MS05: Custom domain registered or delegated to AWS Route 53 hosted zone (2026-05-21)
 - [x] MS06: ACM certificate requested for the Custom_Domain and DNS validation completed (2026-05-21)
 - [x] MS07: SSM SecureString parameter `/dadjokes/ip_hash_salt` set to 32 or more random bytes via `aws ssm put-parameter --type SecureString` (2026-05-21)
-- [ ] MS08: SES domain verification completed for the cost-alert and ops-alert sender address
+- [x] MS08: SES domain verification completed for the cost-alert and ops-alert sender address (2026-05-21)
 - [ ] MS09: Cost SNS topic subscription confirmed by the site-owner email recipient
 - [ ] MS10: Ops SNS topic subscription confirmed by the site-owner email recipient
 - [ ] MS11: Training_Corpus S3 bucket populated with curated source files (only after `training_corpus_rights_confirmed` is flipped to `true` in this document)
