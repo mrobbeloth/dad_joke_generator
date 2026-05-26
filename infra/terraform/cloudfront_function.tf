@@ -48,7 +48,7 @@ locals {
 resource "aws_cloudfront_function" "host_redirect" {
   name    = "${var.project_name}-${var.environment}-host-redirect"
   runtime = "cloudfront-js-2.0"
-  comment = "301-redirect non-canonical hosts (e.g. www.${var.custom_domain}) to the canonical apex (${local.redirect_to_host}). Preserves path + query."
+  comment = "301-redirect non-canonical hosts to ${local.redirect_to_host}"
   publish = true
 
   # CloudFront-JS 2.0 is closer to modern ES; const/arrow/template strings

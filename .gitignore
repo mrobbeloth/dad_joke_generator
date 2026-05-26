@@ -51,6 +51,7 @@ web/.vite/
 **/*.tfplan
 **/*.plan
 **/bootstrap_outputs.json
+**/main_outputs.json
 
 # tfvars files often contain account IDs or environment-specific
 # overrides; the example template is allowlisted.
