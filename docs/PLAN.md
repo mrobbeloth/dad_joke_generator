@@ -158,8 +158,8 @@ Items:
 - [x] MS06: ACM certificate requested for the Custom_Domain and DNS validation completed (2026-05-21)
 - [x] MS07: SSM SecureString parameter `/dadjokes/ip_hash_salt` set to 32 or more random bytes via `aws ssm put-parameter --type SecureString` (2026-05-21)
 - [x] MS08: SES domain verification completed for the cost-alert and ops-alert sender address (2026-05-21)
-- [ ] MS09: Cost SNS topic subscription confirmed by the site-owner email recipient _(subscription provisioned 2026-05-21, status=PendingConfirmation. Tick when site-owner clicks the AWS confirmation email.)_
-- [ ] MS10: Ops SNS topic subscription confirmed by the site-owner email recipient _(subscription provisioned 2026-05-21, status=PendingConfirmation. Tick when site-owner clicks the AWS confirmation email.)_
+- [x] MS09: Cost SNS topic subscription confirmed by the site-owner email recipient (2026-05-21)
+- [x] MS10: Ops SNS topic subscription confirmed by the site-owner email recipient (2026-05-21)
 - [ ] MS11: Training_Corpus S3 bucket populated with curated source files (only after `training_corpus_rights_confirmed` is flipped to `true` in this document)
 - [ ] MS12: Deployment IAM role or user created with least-privilege policies for Bedrock, Polly, Comprehend, DynamoDB, S3, SSM, CloudWatch _(deferred 2026-05-21: the GitHub Actions deploy role `dadjokes-github-deploy` currently has `AdministratorAccess` from bootstrap. The Lambda execution role created by `infra/terraform/iam.tf` is **already** least-privilege (10 documented Sids, all services scoped). The deploy role narrow-down is intentionally deferred to **after the first end-to-end production apply**, when IAM Access Analyzer can generate a least-privilege policy from the real CloudTrail events of that deploy. See `infra/terraform-bootstrap/README.md` "Narrowing the deploy role after first apply" for the runbook.)_
 - [x] MS13: GitHub project board created with exactly five columns: Backlog, In Progress, In Review, In Production, Done (R13.1) (2026-05-21)
