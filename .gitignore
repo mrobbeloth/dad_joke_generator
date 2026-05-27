@@ -61,3 +61,4 @@ web/.vite/
 # Playwright per-machine test artifacts.
 web/test-results/
 web/playwright-report/
+docs/dad_joke_generator.code-workspace
