@@ -178,7 +178,8 @@ Columns (R13.1): Backlog, In Progress, In Review, In Production, Done.
 
 Card list (initial — replace as cards are created):
 
-- _(Backlog)_ — no cards recorded yet. Add cards here as `<card-id>: <title>`.
+- _(Backlog)_
+  - `obs-handler-exception-trace`: Observability gap — handler outer `except` logs `decision="error"` but not the underlying exception type/message/traceback. Add `logger.exception()` (or capture `str(exc)` + `type(exc).__name__`) inside `src/joke_api/handler.py`'s outer `except Exception` block before the sanitized 503 is returned. Project board item `PVTI_lAHOAG93-M4BYamIzguHw_8`. Validates R7.6 / R16.1. Added 2026-05-28 after the Joanna→Matthew voice swap session surfaced a silent failure mode.
 - _(In Progress)_ — no cards recorded yet.
 - _(In Review)_ — no cards recorded yet.
 - _(In Production)_ — no cards recorded yet.
