@@ -1,6 +1,7 @@
-# Account-total monthly budget (MS03) — currently DISABLED.
+# Account-total monthly budget (MS03) — currently DISABLED pending
+# 24-hour cost-data backfill on the new `Proj` tag (see below).
 #
-# # Why this is disabled
+# # Background
 #
 # This account (455110962976) is a member of the Ohio State University
 # AWS Organization (master 683792142612, master email
@@ -9,28 +10,40 @@
 # enterprise CIO-* roles, CrowdStrike security tooling, dad_joke_generator)
 # and racks up ~$200/month in non-dadjokes spend. A whole-account budget
 # at the design's $30 threshold therefore fires the moment it is
-# created, which is noise, not signal.
+# created, which is noise, not signal. The correct fix is a budget
+# scoped to dadjokes-tagged resources only.
 #
-# The correct fix is a budget scoped to `Project=dadjokes`-tagged
-# resources, but that requires the `Project` user-defined cost-allocation
-# tag to be activated at the org level, and only the management account
-# can do that:
+# # The Proj cost-allocation tag
 #
-#   aws ce update-cost-allocation-tags-status \
-#     --cost-allocation-tags-status TagKey=Project,Status=Active
+# OSU OTDI Cloud Platform (Lok Yu, yu.31@osu.edu, 2026-05-27) confirmed
+# the existing user-defined cost-allocation tag at the org level is
+# `Proj` (not `Project`). The provider's default_tags blocks in both
+# infra/terraform-bootstrap/provider.tf and infra/terraform/provider.tf
+# now emit BOTH `Project=dadjokes` (human-readable, console-visible)
+# AND `Proj=dadjokes` (the cost-allocation key). Cost Explorer and
+# Budgets filter on the latter; the cost_filter below uses
+# `user:Proj$dadjokes`.
 #
-# OSU IT has been emailed (2026-05-21). Once they confirm the tag is
-# active:
+# # Why this is disabled right now (separate from the original deferral)
 #
-#   1. Set `budget_enabled = true` (variable defaults to false).
-#   2. Verify a Cost-Explorer probe with a `Project=dadjokes` tag
-#      filter returns non-zero on tagged resources, e.g.:
+# Cost-allocation tag data backfills with a delay of up to 24 hours
+# after a resource is first tagged. We just re-tagged every resource
+# in this stack on 2026-05-29 (terraform apply that propagated the
+# `Proj` default tag to every taggable resource). Until backfill
+# completes, the budget would report $0 even with the filter set
+# correctly. The plan is:
+#
+#   1. terraform apply with budget_enabled=false (re-tags resources;
+#      this is the apply you are reviewing now).
+#   2. Wait ~24 hours.
+#   3. Verify with a Cost-Explorer probe:
 #        aws ce get-cost-and-usage \
 #          --time-period Start=YYYY-MM-DD,End=YYYY-MM-DD \
 #          --granularity MONTHLY --metrics UnblendedCost \
-#          --filter '{"Tags":{"Key":"Project","Values":["dadjokes"]}}'
-#   3. terraform apply
-#   4. Tick MS03 in docs/PLAN.md with the activation date.
+#          --filter '{"Tags":{"Key":"Proj","Values":["dadjokes"]}}'
+#      If the result is non-zero, the budget filter will work.
+#   4. Set budget_enabled = true and terraform apply again.
+#   5. Tick MS03 in docs/PLAN.md with the activation date.
 #
 # # Why not delete the resource block entirely
 #
@@ -44,8 +57,8 @@
 #   - PLAN.md MS03
 
 resource "aws_budgets_budget" "account_total" {
-  # Disabled until OSU IT activates the `Project` cost-allocation tag at
-  # the org level. See the file-level docstring above. Set
+  # Disabled until cost-allocation tag data backfills on the newly-applied
+  # `Proj` tag (see the file-level docstring above). Set
   # `budget_enabled = true` to re-enable.
   count = var.budget_enabled ? 1 : 0
 
@@ -58,11 +71,12 @@ resource "aws_budgets_budget" "account_total" {
   # Scope the budget to dadjokes-tagged resources only. Without this
   # filter the budget covers the whole shared account and produces
   # constant false alarms from non-dadjokes workloads. The filter
-  # requires the `Project` cost-allocation tag to be activated at the
-  # org level (see the file-level docstring).
+  # requires the `Proj` cost-allocation tag to be activated at the
+  # org level (active per OSU IT confirmation 2026-05-27); see
+  # the file-level docstring above.
   cost_filter {
     name   = "TagKeyValue"
-    values = ["user:Project$${var.project_name}"]
+    values = ["user:Proj$${var.project_name}"]
   }
 
   notification {
