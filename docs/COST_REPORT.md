@@ -118,7 +118,7 @@ Combined Bedrock + Polly total at each traffic level. Other AWS service costs (L
 | Claude 3 Haiku + Standard | $2.70 | $13.50 | $27.00 |
 | Claude 3 Haiku + Neural | $8.10 | $40.50 | $81.00 |
 
-The `amazon.nova-lite-v1:0` + `Joanna` (standard) row is the lowest-cost configuration that meets every functional requirement (R1, R2, R4) with a margin large enough to absorb the up-to-3× generation-attempt budget required by R1.4 / R4.2.
+The `amazon.nova-lite-v1:0` + `Matthew` (standard) row is the lowest-cost configuration that meets every functional requirement (R1, R2, R4) with a margin large enough to absorb the up-to-3× generation-attempt budget required by R1.4 / R4.2. Standard-tier pricing is identical across voice ids, so the Joanna numbers in the Section 4 table apply to Matthew unchanged.
 
 ---
 
@@ -139,13 +139,13 @@ This string SHALL be written verbatim to SSM parameter `/dadjokes/bedrock_model_
 
 ### 5.2 Recommended Polly voice
 
-**`Joanna`** (Polly standard engine, US English)
+**`Matthew`** (Polly standard engine, US English)
 
 Justification:
 
-- Standard tier at $4.00/1M characters costs 25% of the neural tier (Section 3.2); at 1000 jokes/day Polly spend is **$18.00/month** versus $72.00 for neural.
-- R2.8 mandates a standard (non-neural) voice in Phase 1; `Joanna` is one of the longest-supported, broadly-accessible US English standard voices.
-- The voice id is a single short string, friendly to SSM Parameter Store storage at `/dadjokes/polly_voice_id` and to the Polly `synthesize_speech(VoiceId='Joanna', Engine='standard')` call described in `design.md`.
+- Standard tier at $4.00/1M characters costs 25% of the neural tier (Section 3.2); at 1000 jokes/day Polly spend is **$18.00/month** versus $72.00 for neural. Standard pricing is uniform across voice ids, so swapping voice ids inside the standard tier is cost-neutral.
+- R2.8 mandates a standard (non-neural) voice in Phase 1; `Matthew` is one of the longest-supported US English standard voices and is the canonical mature-male narrator voice in the Polly catalog. A male voice fits the "dad joke" subject matter, which is the motivating product theme behind R1 (Joke Generation) and R2 (Audio Output).
+- The voice id is a single short string, friendly to SSM Parameter Store storage at `/dadjokes/polly_voice_id` and to the Polly `synthesize_speech(VoiceId='Matthew', Engine='standard')` call described in `design.md`.
 - A neural switch can be evaluated in Phase 2 by changing the SSM parameter and the `Engine` value; this report would then need an R9.5 review.
 
 This string SHALL be written verbatim to SSM parameter `/dadjokes/polly_voice_id` and recorded in `docs/PLAN.md` per R2.8 and R9.4.
@@ -155,7 +155,7 @@ This string SHALL be written verbatim to SSM parameter `/dadjokes/polly_voice_id
 | Decision | Value |
 |---|---|
 | Default Bedrock model id | `amazon.nova-lite-v1:0` |
-| Default Polly voice id | `Joanna` |
+| Default Polly voice id | `Matthew` |
 | Default Polly engine | `standard` |
 | Projected combined cost at 100 jokes/day | $2.00 / month |
 | Projected combined cost at 500 jokes/day | $9.99 / month |

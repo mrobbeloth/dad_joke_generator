@@ -49,7 +49,7 @@ variable "bedrock_model_id" {
 variable "polly_voice_id" {
   description = "Polly Standard-engine voice id used by Voice_Synthesizer. Default per docs/COST_REPORT.md Section 5 (R2.8, R9.4)."
   type        = string
-  default     = "Joanna"
+  default     = "Matthew"
 
   validation {
     condition     = length(trimspace(var.polly_voice_id)) > 0

@@ -13,7 +13,7 @@
 These values are also written to AWS Systems Manager Parameter Store at deploy time and are validated against the runtime configuration by the Production_Gate (R12.6, Property 25).
 
 - Bedrock model: amazon.nova-lite-v1:0
-- Polly voice: Joanna
+- Polly voice: Matthew
 - Polly engine: standard
 - training_corpus_rights_confirmed: false
 
