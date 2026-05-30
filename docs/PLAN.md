@@ -180,6 +180,7 @@ Card list (initial — replace as cards are created):
 
 - _(Backlog)_
   - `obs-handler-exception-trace`: Observability gap — handler outer `except` logs `decision="error"` but not the underlying exception type/message/traceback. Add `logger.exception()` (or capture `str(exc)` + `type(exc).__name__`) inside `src/joke_api/handler.py`'s outer `except Exception` block before the sanitized 503 is returned. Project board item `PVTI_lAHOAG93-M4BYamIzguHw_8`. Validates R7.6 / R16.1. Added 2026-05-28 after the Joanna→Matthew voice swap session surfaced a silent failure mode.
+  - `bootstrap-state-migration`: Move `infra/terraform-bootstrap`'s state from the local `terraform.tfstate` file into the same S3 bucket the main module uses (different key `bootstrap/terraform.tfstate`). Add a `backend "s3"` block to `infra/terraform-bootstrap/versions.tf` and run `terraform init -migrate-state`. Removes the laptop-loss / multi-operator / drift-recovery risks documented in the bootstrap README's "Tearing it all down" section. Project board item `PVTI_lAHOAG93-M4BYamIzguN8vs`. Added 2026-05-29.
 - _(In Progress)_ — no cards recorded yet.
 - _(In Review)_ — no cards recorded yet.
 - _(In Production)_ — no cards recorded yet.
