@@ -531,25 +531,44 @@ class TestCloudWatchAlarmsWiring:
         _ = _resource_block(tf, "aws_sns_topic", "cost_alerts")
         _ = _resource_block(tf, "aws_sns_topic", "ops_alerts")
 
-    def test_cost_alarm_publishes_only_to_cost_topic(self) -> None:
-        """Validates Requirements 16.3, 16.4.
+    def test_no_account_wide_billing_alarm(self) -> None:
+        """Validates Requirements 16.3 (cost guardrail moved to AWS Budgets).
 
-        The cost-threshold alarm wires to the cost_alerts topic and not
-        to the ops_alerts topic.
+        The Phase 1 design used a CloudWatch alarm on
+        ``AWS/Billing / EstimatedCharges`` for the cost guardrail. That
+        metric supports only the Currency / ServiceName / LinkedAccount
+        dimensions and CANNOT be scoped to a cost-allocation tag, so on
+        the shared OSU member account it fired on every project's spend.
+        The dadjokes-only cost guardrail now lives in AWS Budgets
+        (infra/terraform-bootstrap/budgets.tf, filtered to
+        ``user:Proj$dadjokes``). This test guards against a regression
+        that reintroduces the account-wide billing alarm.
         """
         tf = _load_tf("cloudwatch_alarms.tf")
-        body = _resource_block(tf, "aws_cloudwatch_metric_alarm", "cost_threshold")
+        # Match the actual HCL attribute assignments, not comment prose
+        # (the file header legitimately explains why the billing alarm
+        # was removed and therefore still mentions "AWS/Billing").
+        assert not re.search(r'namespace\s*=\s*"AWS/Billing"', tf), (
+            "cloudwatch_alarms.tf must not declare an AWS/Billing alarm; "
+            "the cost guardrail belongs in AWS Budgets (tag-scoped). See "
+            "infra/terraform-bootstrap/budgets.tf."
+        )
+        assert not re.search(r'metric_name\s*=\s*"EstimatedCharges"', tf), (
+            "account-wide EstimatedCharges alarm must not be present"
+        )
+        assert not re.search(
+            r'resource\s+"aws_cloudwatch_metric_alarm"\s+"cost_threshold"', tf
+        ), "the cost_threshold billing alarm resource must not be present"
 
-        assert re.search(
-            r"alarm_actions\s*=\s*\[\s*aws_sns_topic\.cost_alerts\.arn\s*\]",
-            body,
-        ), (
-            "cost_threshold alarm must wire alarm_actions to "
-            "[aws_sns_topic.cost_alerts.arn]"
-        )
-        assert "aws_sns_topic.ops_alerts.arn" not in body, (
-            "cost_threshold alarm must not reference the ops_alerts topic"
-        )
+    def test_cost_alerts_topic_retained(self) -> None:
+        """Validates Requirements 16.4.
+
+        Removing the billing alarm must NOT remove the cost_alerts SNS
+        topic: the Lambda-side dispatch_cost_alert path and the MS09
+        email subscription still depend on it.
+        """
+        tf = _load_tf("cloudwatch_alarms.tf")
+        _ = _resource_block(tf, "aws_sns_topic", "cost_alerts")
 
     def test_ops_alarm_publishes_only_to_ops_topic(self) -> None:
         """Validates Requirements 16.6.

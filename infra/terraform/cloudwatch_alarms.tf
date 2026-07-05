@@ -4,21 +4,18 @@
 #
 #   R16.2 -- ops alarms on the dadjokes/* CloudWatch metrics emitted by
 #            joke_api.observability.emit_metric.
-#   R16.3 -- cost alarm on the AWS/Billing EstimatedCharges metric, using the
-#            same threshold value stored at /dadjokes/cost_alarm_threshold_usd.
+#   R16.3 -- cost guardrail. Originally an account-wide billing alarm here;
+#            moved 2026-05-29 to the tag-scoped AWS Budget in
+#            infra/terraform-bootstrap/budgets.tf (billing metrics cannot be
+#            filtered by cost-allocation tag on the shared OSU account).
 #   R16.4 -- separate cost SNS topic carrying the [COST-ALERT] subject line.
 #   R16.6 -- separate ops SNS topic carrying the [OPS-ALERT] subject line.
 #
-# Channel separation (Property 33) is enforced here: every cost alarm wires
-# only to aws_sns_topic.cost_alerts, every ops alarm wires only to
-# aws_sns_topic.ops_alerts. The email subject prefixes are produced by the
-# Lambda-side dispatcher (joke_api.observability.dispatch_cost_alert /
-# dispatch_ops_alert); IaC only owns the topic/alarm wiring.
-#
-# IMPORTANT: AWS Billing metrics (AWS/Billing namespace) are published in
-# us-east-1 only, regardless of where the rest of the workload lives. The
-# default of var.aws_region = "us-east-1" is what makes this module work
-# without an explicit alternate provider alias for billing.
+# Channel separation (Property 33) is enforced here: every ops alarm wires
+# only to aws_sns_topic.ops_alerts. The cost SNS topic is retained for the
+# Lambda-side dispatcher (joke_api.observability.dispatch_cost_alert), even
+# though no CloudWatch alarm publishes to it anymore. The email subject
+# prefixes are produced by that dispatcher; IaC only owns the topic wiring.
 
 locals {
   # Resolve Lambda wiring lazily so this module validates standalone even
@@ -66,33 +63,38 @@ resource "aws_sns_topic_subscription" "ops_alerts_email" {
 }
 
 # ---------------------------------------------------------------------------
-# Cost alarm (R16.3)
+# Cost guardrail (R16.3) — moved to AWS Budgets.
 # ---------------------------------------------------------------------------
-
-# AWS/Billing EstimatedCharges is published every ~6 hours, but design.md
-# specifies a 5-minute evaluation window. The alarm simply re-evaluates the
-# most recent published value within each 5-minute period; treat_missing_data
-# = "notBreaching" prevents spurious ALARM transitions during the long gaps
-# between billing publishes.
-resource "aws_cloudwatch_metric_alarm" "cost_threshold" {
-  alarm_name          = "${var.project_name}-${var.environment}-cost-threshold"
-  alarm_description   = "Monthly AWS estimated charges exceeded ${var.cost_alarm_threshold_usd} USD (R16.3)."
-  namespace           = "AWS/Billing"
-  metric_name         = "EstimatedCharges"
-  statistic           = "Maximum"
-  dimensions          = { Currency = "USD" }
-  comparison_operator = "GreaterThanOrEqualToThreshold"
-  evaluation_periods  = 1
-  period              = 300
-  threshold           = var.cost_alarm_threshold_usd
-  treat_missing_data  = "notBreaching"
-
-  # Wire BOTH ALARM and OK transitions so the dispatcher's OK->ALARM gate
-  # (Property 31) sees both states. Suppressing the OK transition here would
-  # leave the dispatcher unable to detect the edge.
-  alarm_actions = [aws_sns_topic.cost_alerts.arn]
-  ok_actions    = [aws_sns_topic.cost_alerts.arn]
-}
+#
+# The Phase 1 design specified a CloudWatch alarm on AWS/Billing
+# EstimatedCharges for the cost guardrail. That approach is only correct
+# on a DEDICATED AWS account: AWS/Billing EstimatedCharges supports only
+# the Currency, ServiceName, and LinkedAccount dimensions — never
+# user-defined cost-allocation tags. On this SHARED OSU member account
+# (455110962976, org o-w9mnpf422e) the metric sums every project's spend
+# (stoplight-classroom, retro-web-gateway, CIO enterprise tooling, etc.),
+# so an account-wide alarm at any dadjokes-appropriate threshold fires
+# constantly on non-dadjokes cost — noise, not signal.
+#
+# The dadjokes-only cost guardrail therefore lives in AWS Budgets, which
+# CAN filter by the `Proj=dadjokes` cost-allocation tag (active at the
+# org payer-account level per OSU IT, 2026-05-27). See
+# infra/terraform-bootstrap/budgets.tf: aws_budgets_budget.account_total
+# scoped to user:Proj$dadjokes. The budget captures ALL dadjokes-tagged
+# spend (Lambda + S3 + CloudFront + DynamoDB + idle), not just the
+# per-request Lambda cost estimates a custom CloudWatch metric could
+# offer.
+#
+# The cost_alerts SNS topic and its email subscription (MS09) are
+# retained: the Lambda-side joke_api.observability.dispatch_cost_alert
+# path still publishes to it, and Property 31/33's email-shape contract
+# is unaffected. Only the account-wide billing ALARM was removed.
+#
+# References:
+#   - PLAN.md MS03 (the AWS Budget)
+#   - infra/terraform-bootstrap/budgets.tf (the replacement guardrail)
+#   - design.md R16.3 (original CloudWatch-alarm intent; superseded on
+#     shared accounts)
 
 # ---------------------------------------------------------------------------
 # Ops alarms (R16.2 / R16.6)

@@ -17,10 +17,10 @@ output "ops_alerts_topic_arn" {
   value       = aws_sns_topic.ops_alerts.arn
 }
 
-output "cost_alarm_name" {
-  description = "Name of the AWS/Billing EstimatedCharges cost alarm (R16.3)."
-  value       = aws_cloudwatch_metric_alarm.cost_threshold.alarm_name
-}
+# NOTE: the account-wide AWS/Billing cost alarm was removed 2026-05-29
+# (it could not be scoped to the Proj=dadjokes cost-allocation tag on the
+# shared OSU account). The dadjokes cost guardrail is now the AWS Budget
+# in infra/terraform-bootstrap/budgets.tf. No cost_alarm_name output.
 
 output "moderation_rejection_alarm_name" {
   description = "Name of the moderation_rejections_per_hour ops alarm (R16.6)."

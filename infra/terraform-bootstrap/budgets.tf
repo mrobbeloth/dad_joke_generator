@@ -1,5 +1,12 @@
-# Account-total monthly budget (MS03) — currently DISABLED pending
-# 24-hour cost-data backfill on the new `Proj` tag (see below).
+# dadjokes-scoped monthly budget (MS03) — ENABLED, $20 limit.
+#
+# This is the project's PRIMARY cost guardrail. The account-wide
+# CloudWatch billing alarm that originally satisfied R16.3 was removed
+# on 2026-05-29 (see infra/terraform/cloudwatch_alarms.tf) because
+# AWS/Billing EstimatedCharges cannot be scoped to a cost-allocation
+# tag and therefore fired constantly on non-dadjokes spend on this
+# shared OSU account. This budget filters to `Proj=dadjokes` and is the
+# correct dadjokes-only cost signal.
 #
 # # Background
 #
@@ -74,9 +81,16 @@ resource "aws_budgets_budget" "account_total" {
   # requires the `Proj` cost-allocation tag to be activated at the
   # org level (active per OSU IT confirmation 2026-05-27); see
   # the file-level docstring above.
+  # AWS Budgets TagKeyValue syntax is "user:<TagKey>$<TagValue>", which
+  # needs a LITERAL dollar sign between key and value. Terraform's `$$`
+  # escaping is error-prone here (an earlier `$${var.project_name}`
+  # produced the literal string "user:Proj${var.project_name}" and
+  # silently filtered to $0). `format()` sidesteps escaping entirely:
+  # the `$` in the format string is a plain character and `%s` is the
+  # interpolated project name, yielding "user:Proj$dadjokes".
   cost_filter {
     name   = "TagKeyValue"
-    values = ["user:Proj$${var.project_name}"]
+    values = [format("user:Proj$%s", var.project_name)]
   }
 
   notification {

@@ -69,9 +69,9 @@ variable "github_deploy_session_name_prefix" {
 # by default — see budgets.tf for the OSU-IT cost-allocation-tag
 # dependency that is blocking re-enablement.
 variable "budget_enabled" {
-  description = "Set to true once OSU IT has activated the Project cost-allocation tag at the org level. See infra/terraform-bootstrap/budgets.tf for context."
+  description = "Whether the dadjokes-scoped AWS Budget is provisioned. Enabled 2026-05-29: the `Proj` cost-allocation tag is active at the org level and this budget is now the primary cost guardrail (replaces the removed account-wide CloudWatch billing alarm). See infra/terraform-bootstrap/budgets.tf."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "budget_alert_email" {
@@ -86,9 +86,9 @@ variable "budget_alert_email" {
 }
 
 variable "budget_monthly_limit_usd" {
-  description = "Monthly account-total budget limit in USD. Set above the design's cost_alarm_threshold_usd (10) so the AWS-Budgets early-warning fires before the workload-cost CloudWatch alarm does."
+  description = "Monthly dadjokes-scoped budget limit in USD (filtered to Proj=dadjokes). Set to 20 per operator request 2026-05-29. This is the project's primary cost guardrail now that the account-wide CloudWatch billing alarm has been removed (it could not be tag-scoped on the shared account)."
   type        = number
-  default     = 30
+  default     = 20
 
   validation {
     condition     = var.budget_monthly_limit_usd > 0 && var.budget_monthly_limit_usd <= 1000
