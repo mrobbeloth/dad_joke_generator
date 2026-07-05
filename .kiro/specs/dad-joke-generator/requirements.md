@@ -58,7 +58,7 @@ The Dad Joke Generator is a web application that produces corny, family-friendly
 
 ### Requirement 2: Voice Output of Generated Jokes
 
-**User Story:** As a visitor, I want to hear the joke read aloud, so that I can enjoy the delivery and share it audibly.
+**User Story:** As a visitor, I want to hear the joke read aloud and save the audio, so that I can enjoy the delivery, share it audibly, and keep a copy to replay offline.
 
 #### Acceptance Criteria
 
@@ -71,6 +71,8 @@ The Dad Joke Generator is a web application that produces corny, family-friendly
 7. WHERE `audio_available` is `false`, THE Frontend SHALL hide the play, pause, and replay controls and SHALL display the joke as text only.
 8. WHEN Polly synthesis is invoked, THE Voice_Synthesizer SHALL use the specific Polly voice identifier recorded in the Plan_Document as selected by the Cost_Report, and in Phase 1 this identifier SHALL reference a standard (non-neural) Polly voice.
 9. IF the joke text exceeds 1500 characters, THEN THE Voice_Synthesizer SHALL skip Polly synthesis, and THE Joke_API SHALL return the joke text with `audio_available` set to `false`.
+10. WHERE the response contains a playable audio URL, THE Joke_API SHALL also return a distinct download URL that, when retrieved, delivers the synthesized MP3 as a file attachment via a `Content-Disposition: attachment` response header with a filename of the form `dad-joke-<id>.mp3`, AND THE download URL SHALL remain valid for at least 15 minutes from the time of response.
+11. WHERE the response contains a download URL, THE Frontend SHALL provide a download control that saves the audio file to the visitor's device, AND WHERE `audio_available` is `false`, THE Frontend SHALL hide the download control.
 
 ### Requirement 3: Family-Friendly Input Moderation
 
