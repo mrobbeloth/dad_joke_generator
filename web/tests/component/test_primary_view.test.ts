@@ -54,10 +54,11 @@ function buildSuccess(overrides: Partial<JokeApiSuccess> = {}): JokeApiSuccess {
     id: "joke-123",
     text: "Why did the chicken join a band? Because it had the drumsticks.",
     audioUrl: "https://example.test/audio.mp3",
+    audioDownloadUrl: "https://example.test/audio.mp3?download=1",
     audioAvailable: true,
     remaining: 4,
-    modelId: "anthropic.claude-3-haiku",
-    voiceId: "Joanna",
+    modelId: "amazon.nova-lite-v1:0",
+    voiceId: "Matthew",
     ...overrides,
   };
 }
@@ -331,6 +332,76 @@ describe("TestJokeRender", () => {
       expect(getGenerateButton().disabled).toBe(true);
     });
     expect(getGenerateButton().getAttribute("aria-disabled")).toBe("true");
+  });
+});
+
+// ===========================================================================
+// TestDownloadControl (R2.10, R2.11)
+// ===========================================================================
+
+describe("TestDownloadControl", () => {
+  function getDownloadLink(): HTMLAnchorElement {
+    return getById<HTMLAnchorElement>("download-link");
+  }
+
+  it("shows the download link with href + filename when a download URL is present", async () => {
+    mockRequestJoke.mockResolvedValueOnce(
+      buildSuccess({
+        id: "abc-123",
+        audioAvailable: true,
+        audioUrl: "https://example.test/joke.mp3",
+        audioDownloadUrl: "https://example.test/joke.mp3?download=1",
+      }),
+    );
+
+    await submit();
+
+    const link = getDownloadLink();
+    await waitFor(() => {
+      expect(link.hidden).toBe(false);
+    });
+    expect(link.getAttribute("href")).toBe(
+      "https://example.test/joke.mp3?download=1",
+    );
+    // R2.11: friendly filename derived from the joke id.
+    expect(link.getAttribute("download")).toBe("dad-joke-abc-123.mp3");
+  });
+
+  it("hides the download link when audio is available but no download URL is present", async () => {
+    mockRequestJoke.mockResolvedValueOnce(
+      buildSuccess({
+        audioAvailable: true,
+        audioUrl: "https://example.test/joke.mp3",
+        audioDownloadUrl: null,
+      }),
+    );
+
+    await submit();
+
+    await waitFor(() => {
+      expect(getById<HTMLElement>("audio-controls").hidden).toBe(false);
+    });
+    const link = getDownloadLink();
+    expect(link.hidden).toBe(true);
+    expect(link.hasAttribute("href")).toBe(false);
+  });
+
+  it("hides the download link when audio is unavailable", async () => {
+    mockRequestJoke.mockResolvedValueOnce(
+      buildSuccess({
+        audioAvailable: false,
+        audioUrl: null,
+        audioDownloadUrl: null,
+      }),
+    );
+
+    await submit();
+
+    await waitFor(() => {
+      expect(getById<HTMLElement>("joke-display").hidden).toBe(false);
+    });
+    expect(getDownloadLink().hidden).toBe(true);
+    expect(getById<HTMLElement>("audio-controls").hidden).toBe(true);
   });
 });
 

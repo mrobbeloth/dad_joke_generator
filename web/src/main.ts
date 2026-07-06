@@ -46,6 +46,7 @@ interface PrimaryViewElements {
   audioControls: HTMLElement;
   jokeAudio: HTMLAudioElement;
   replayBtn: HTMLButtonElement;
+  downloadLink: HTMLAnchorElement;
 }
 
 function getRequired<T extends HTMLElement>(id: string): T {
@@ -71,6 +72,7 @@ function lookupElements(): PrimaryViewElements {
     audioControls: getRequired<HTMLElement>("audio-controls"),
     jokeAudio: getRequired<HTMLAudioElement>("joke-audio"),
     replayBtn: getRequired<HTMLButtonElement>("replay-btn"),
+    downloadLink: getRequired<HTMLAnchorElement>("download-link"),
   };
 }
 
@@ -225,14 +227,42 @@ function renderJoke(
   if (response.audioAvailable && response.audioUrl !== null) {
     elements.jokeAudio.src = response.audioUrl;
     elements.audioControls.hidden = false; // R2.5
+    renderDownloadLink(elements, response.audioDownloadUrl, response.id);
   } else {
     // R2.7: hide audio controls completely when audio is not available.
     elements.jokeAudio.removeAttribute("src");
     elements.jokeAudio.load();
     elements.audioControls.hidden = true;
+    // R2.11: hide the download control whenever audio is unavailable.
+    renderDownloadLink(elements, null, response.id);
   }
 
   renderRemaining(elements, response.remaining);
+}
+
+/** Show/hide and configure the audio download link (R2.11).
+ *
+ *  When a download URL is present, point the link at it and set a
+ *  friendly `download` filename (`dad-joke-<id>.mp3`) so the browser
+ *  saves rather than navigates. The presigned URL already carries a
+ *  Content-Disposition attachment header (R2.10); the `download`
+ *  attribute is a same-origin hint that the S3 origin ignores
+ *  cross-origin, so the server-side disposition is what actually
+ *  forces the download. When no URL is present, hide the control and
+ *  clear its href so a stale link can't be clicked. */
+function renderDownloadLink(
+  elements: PrimaryViewElements,
+  downloadUrl: string | null,
+  jokeId: string,
+): void {
+  if (downloadUrl !== null && downloadUrl.length > 0) {
+    elements.downloadLink.href = downloadUrl;
+    elements.downloadLink.setAttribute("download", `dad-joke-${jokeId}.mp3`);
+    elements.downloadLink.hidden = false;
+  } else {
+    elements.downloadLink.removeAttribute("href");
+    elements.downloadLink.hidden = true;
+  }
 }
 
 /** Build a human-readable error message from a sanitized backend error.

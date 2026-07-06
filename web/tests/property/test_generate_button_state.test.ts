@@ -157,6 +157,7 @@ function buildSuccess(overrides: Partial<JokeApiSuccess> = {}): JokeApiSuccess {
     id: "joke-prop-21",
     text: "Property 21 joke text.",
     audioUrl: null,
+    audioDownloadUrl: null,
     audioAvailable: false,
     remaining: 4,
     modelId: "anthropic.claude-3-haiku",

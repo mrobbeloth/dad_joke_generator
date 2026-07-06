@@ -736,6 +736,8 @@ class TestSoftFailPaths:
         body = json.loads(response["body"])
         assert body["audioAvailable"] is False
         assert body["audioUrl"] is None
+        # R2.10: no download URL when audio is unavailable.
+        assert body["audioDownloadUrl"] is None
         assert body["text"] == _GOOD_JOKE_TEXT
 
         # Successful joke generation still bumps the success metric --
@@ -755,7 +757,8 @@ class TestSoftFailPaths:
         _patch_through_validation(monkeypatch)
         _stub_successful_generation(monkeypatch)
 
-        # Synthesis succeeds so the audio fields reflect a real URL.
+        # Synthesis succeeds so the audio fields reflect a real URL,
+        # including the R2.10 download variant.
         monkeypatch.setattr(
             handler.voice_synthesizer,
             "synthesize",
@@ -763,6 +766,7 @@ class TestSoftFailPaths:
                 audio_url="https://example.invalid/audio.mp3",
                 audio_available=True,
                 error=None,
+                audio_download_url="https://example.invalid/audio.mp3?dl=1",
             ),
         )
 
@@ -785,6 +789,8 @@ class TestSoftFailPaths:
         assert body["text"] == _GOOD_JOKE_TEXT
         assert body["audioAvailable"] is True
         assert body["audioUrl"] == "https://example.invalid/audio.mp3"
+        # R2.10: the download URL flows through the POST success path.
+        assert body["audioDownloadUrl"] == "https://example.invalid/audio.mp3?dl=1"
 
     def test_rate_limit_increment_soft_fail_returns_conservative_remaining(
         self,

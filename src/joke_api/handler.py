@@ -440,6 +440,7 @@ def _handle_post_jokes(
         joke_id=generation_id,
         text=joke_text,
         audio_url=synthesis.audio_url,
+        audio_download_url=synthesis.audio_download_url,
         audio_available=synthesis.audio_available,
         remaining=remaining,
         model_id=cfg.bedrock_model_id,
@@ -530,13 +531,16 @@ def _handle_get_joke_by_id(
             error_fields={},
         )
 
-    # ---- Re-presign the audio reference (R18.3) ----
-    audio_url, audio_available = _re_presign_audio_ref(record.audio_ref)
+    # ---- Re-presign the audio reference (R18.3, R2.10) ----
+    audio_url, audio_download_url, audio_available = _re_presign_audio_ref(
+        record.audio_ref
+    )
 
     response = response_builder.build_success(
         joke_id=record.id,
         text=record.joke_text,
         audio_url=audio_url,
+        audio_download_url=audio_download_url,
         audio_available=audio_available,
         remaining=None,  # retrieval is quota-neutral
         model_id=record.model_id,
@@ -620,30 +624,44 @@ def _handle_get_health() -> dict:
 
 def _re_presign_audio_ref(
     audio_ref: Optional[str],
-) -> tuple[Optional[str], bool]:
-    """Mint a fresh presigned URL from a stored ``s3://`` audio_ref.
+) -> tuple[Optional[str], Optional[str], bool]:
+    """Mint fresh presigned URLs from a stored ``s3://`` audio_ref.
 
     ``audio_ref`` is the canonical ``s3://<bucket>/<key>`` URI written
     by :func:`joke_store.persist`. R18.3 forbids returning the raw URI
-    to the audit consumer; we parse out the bucket / key, soft-fail
-    via :func:`voice_synthesizer.presign_audio_url`, and surface the
-    outcome as ``(audio_url, audio_available)``. Any malformed URI or
-    presign failure collapses to ``(None, False)`` so the visitor
-    still gets the joke text.
+    to the audit consumer; we parse out the bucket / key and mint two
+    presigned URLs via :func:`voice_synthesizer.presign_audio_url`:
+
+    * a playback URL (inline), and
+    * a download URL (R2.10) with an attachment disposition and a
+      ``dad-joke-<id>.mp3`` filename derived from the object key.
+
+    Returns ``(audio_url, audio_download_url, audio_available)``. Any
+    malformed URI or a playback-presign failure collapses to
+    ``(None, None, False)`` so the visitor still gets the joke text.
+    A download-presign failure alone degrades to
+    ``(audio_url, None, True)`` -- playback still works.
     """
     if not isinstance(audio_ref, str) or not audio_ref.startswith("s3://"):
-        return (None, False)
+        return (None, None, False)
     remainder = audio_ref[len("s3://"):]
     slash_index = remainder.find("/")
     if slash_index <= 0 or slash_index >= len(remainder) - 1:
         # Either no key separator, or empty bucket / key.
-        return (None, False)
+        return (None, None, False)
     bucket = remainder[:slash_index]
     key = remainder[slash_index + 1:]
     url = voice_synthesizer.presign_audio_url(bucket, key)
     if url is None:
-        return (None, False)
-    return (url, True)
+        return (None, None, False)
+    # Derive the generation id for the friendly filename from the key
+    # (``<uuid>.mp3`` -> ``<uuid>``). If the key has no ``.mp3`` suffix
+    # we still pass the whole key; download_disposition just wraps it.
+    generation_id = key[:-len(".mp3")] if key.endswith(".mp3") else key
+    download_url = voice_synthesizer.presign_audio_url(
+        bucket, key, download_generation_id=generation_id
+    )
+    return (url, download_url, True)
 
 
 # ---------------------------------------------------------------------------

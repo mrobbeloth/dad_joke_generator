@@ -231,13 +231,15 @@ def generate(
 
 ```python
 def synthesize(joke_text: str) -> SynthesisResult:
-    """Returns SynthesisResult{audio_url|None, audio_available: bool, error: str|None}."""
+    """Returns SynthesisResult{audio_url|None, audio_download_url|None,
+    audio_available: bool, error: str|None}."""
 ```
 
 - Skips Polly when `len(joke_text) > 1500` (R2.9).
 - Calls `polly.synthesize_speech(OutputFormat='mp3', SampleRate='22050', VoiceId=<ssm>, Engine='standard', Text=joke_text)` (R2.2, R2.8).
 - 10-second hard budget on synthesis (R2.6); writes MP3 to `s3://<audio-bucket>/<generation_id>.mp3`.
-- Generates a 15-minute presigned GET URL (R2.4).
+- Generates a 15-minute presigned GET URL for inline playback (R2.4).
+- Generates a **second** 15-minute presigned GET URL for download (R2.10): identical object, but with `ResponseContentDisposition = attachment; filename="dad-joke-<id>.mp3"` so the browser saves the file with a friendly name instead of streaming it. This is surfaced as `audio_download_url` and mapped to the response's `audioDownloadUrl`. The download presign is a strictly weaker dependency than playback: if only the download presign fails, `audio_available` stays `true` and `audio_download_url` is `null`. The `GET /v1/jokes/{id}` audit path re-presigns both variants from the stored `s3://` reference via `voice_synthesizer.presign_audio_url(..., download_generation_id=...)`. Cross-origin note: the presigned S3 URL is a different origin than the SPA, so the HTML `download` attribute alone would be ignored — the server-side `Content-Disposition` header is what actually forces the download. The frontend download control (R2.11) is hidden whenever `audioDownloadUrl` is `null`.
 
 ### Rate_Limiter
 
@@ -625,6 +627,12 @@ The properties below are universally quantified statements derived from the prew
 
 **Validates: Requirements 18.6**
 
+### Property 45: Audio download URL carries an attachment disposition
+
+*For any* generation that produced audio, the response SHALL contain a download URL distinct from the playback URL, that download URL's presign SHALL set `ResponseContentDisposition` to `attachment; filename="dad-joke-<id>.mp3"`, and its `X-Amz-Expires` value SHALL be greater than or equal to 900 seconds. WHERE the playback presign succeeds but the download presign fails, `audio_available` SHALL remain `true`, the playback URL SHALL be present, and the download URL SHALL be `null` (graceful degradation). WHERE `audio_available` is `false`, both the playback URL and the download URL SHALL be `null`.
+
+**Validates: Requirements 2.10, 2.11**
+
 ## Error Handling
 
 ### Categories and visitor-facing responses
@@ -671,7 +679,7 @@ Two complementary layers, plus selective integration and visual tests:
 - **Library**: [`hypothesis`](https://hypothesis.readthedocs.io/) — mature, well-maintained, idiomatic for Python. We do **not** implement property-based testing from scratch.
 - **Frontend properties** (e.g., Property 21, Property 22) are implemented in TypeScript using [`fast-check`](https://fast-check.dev/) with `vitest`.
 - **Iterations**: `@settings(max_examples=100, deadline=None)` for every property-based test (or `fc.assert(prop, { numRuns: 100 })` in `fast-check`). Properties touching DynamoDB use `moto`; properties touching S3 use `moto` for the Joke_Store and a fake presigner for Property 7.
-- **Tagging**: every property test docstring carries the tag `Feature: dad-joke-generator, Property {n}: {property_text}` so the design ↔ test mapping is greppable. A CI script validates that every property number 1..44 is covered by exactly one test.
+- **Tagging**: every property test docstring carries the tag `Feature: dad-joke-generator, Property {n}: {property_text}` so the design ↔ test mapping is greppable. A CI script validates that every property number 1..45 is covered by exactly one test.
 
 ### Test structure (mapping properties to test files)
 

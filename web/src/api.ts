@@ -41,6 +41,9 @@ export interface JokeApiSuccess {
   readonly id: string;
   readonly text: string;
   readonly audioUrl: string | null;
+  /** Presigned download URL (attachment disposition,
+   *  dad-joke-<id>.mp3 filename) per R2.10, or null when unavailable. */
+  readonly audioDownloadUrl: string | null;
   readonly audioAvailable: boolean;
   readonly remaining: number | null;
   readonly modelId: string;
@@ -193,11 +196,15 @@ export function humanizeError(
 // Body parsing helpers
 // ---------------------------------------------------------------------------
 
-/** Type guard for the success body shape returned by build_success. */
+/** Type guard for the success body shape returned by build_success.
+ *  `audioDownloadUrl` is intentionally NOT required: a response from a
+ *  pre-R2.10 backend omits it, and we tolerate that by treating a
+ *  missing/invalid value as null in bodyToResponse. */
 function isSuccessBody(value: unknown): value is {
   id: string;
   text: string;
   audioUrl: string | null;
+  audioDownloadUrl?: string | null;
   audioAvailable: boolean;
   remaining?: number | null;
   modelId: string;
@@ -285,11 +292,16 @@ function bodyToResponse(status: number, body: unknown): JokeApiResponse {
     }
     const remaining =
       typeof body.remaining === "number" ? body.remaining : null;
+    const audioDownloadUrl =
+      typeof body.audioDownloadUrl === "string"
+        ? body.audioDownloadUrl
+        : null;
     return {
       kind: "success",
       id: body.id,
       text: body.text,
       audioUrl: body.audioUrl,
+      audioDownloadUrl,
       audioAvailable: body.audioAvailable,
       remaining,
       modelId: body.modelId,

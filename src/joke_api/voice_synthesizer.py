@@ -111,6 +111,7 @@ __all__ = [
     "SynthesisResult",
     "synthesize",
     "presign_audio_url",
+    "download_disposition",
 ]
 
 
@@ -206,12 +207,21 @@ class SynthesisResult:
     """Outcome of a single :func:`synthesize` call.
 
     Attributes:
-        audio_url: 15-minute presigned ``GET`` URL when synthesis
-            succeeded; ``None`` on every soft-fail path.
+        audio_url: 15-minute presigned ``GET`` URL for inline
+            playback when synthesis succeeded; ``None`` on every
+            soft-fail path.
+        audio_download_url: 15-minute presigned ``GET`` URL that
+            forces a browser download via a
+            ``Content-Disposition: attachment`` response header with a
+            ``dad-joke-<id>.mp3`` filename (R2.10 / Property 45).
+            Non-None whenever ``audio_available`` is ``True`` and the
+            download-variant presign succeeded; ``None`` on soft-fail
+            or if only the download presign failed (playback is
+            unaffected in the latter case).
         audio_available: ``True`` iff Polly returned audio, S3
-            accepted the upload, and the presigned URL was generated
-            (Property 6). ``audio_url`` is non-None iff this flag is
-            ``True``.
+            accepted the upload, and the (playback) presigned URL was
+            generated (Property 6). ``audio_url`` is non-None iff this
+            flag is ``True``.
         error: ``None`` on success; otherwise a short stable label
             (``"text_length_out_of_range"``, ``"polly_timeout"``,
             ``"polly_unavailable"``, ``"polly_empty_audio"``,
@@ -223,6 +233,9 @@ class SynthesisResult:
     audio_url: Optional[str]
     audio_available: bool
     error: Optional[str]
+    # Last with a default so existing constructors that predate R2.10
+    # (and soft-fail paths) remain valid; None means "no download URL".
+    audio_download_url: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -343,7 +356,7 @@ def synthesize(
     except (BotoCoreError, ClientError):
         return _soft_fail(_ERR_S3_UPLOAD)
 
-    # ---- Presigned URL (R2.4 / Property 7) ----
+    # ---- Presigned playback URL (R2.4 / Property 7) ----
     try:
         url = s3.generate_presigned_url(
             "get_object",
@@ -362,11 +375,53 @@ def synthesize(
         # URL counts as a presign failure.
         return _soft_fail(_ERR_PRESIGN)
 
+    # ---- Presigned download URL (R2.10 / Property 45) ----
+    # A distinct presigned URL that overrides the response
+    # Content-Disposition so the browser downloads the MP3 with a
+    # friendly name instead of streaming it. If ONLY this presign
+    # fails, playback is unaffected: we keep audio_available=True and
+    # audio_url set, and surface audio_download_url=None so the
+    # frontend simply hides the download control. This is a strictly
+    # weaker failure than the playback presign, so it never soft-fails
+    # the whole synthesis.
+    download_url = _presign_download(s3, resolved_bucket, object_key, resolved_generation_id)
+
     return SynthesisResult(
         audio_url=url,
+        audio_download_url=download_url,
         audio_available=True,
         error=None,
     )
+
+
+def _presign_download(
+    s3: Any,
+    bucket: str,
+    key: str,
+    generation_id: str,
+) -> Optional[str]:
+    """Presign a download-variant GET URL, or ``None`` on any failure.
+
+    Adds ``ResponseContentDisposition`` so S3 serves the object with a
+    ``Content-Disposition: attachment; filename="dad-joke-<id>.mp3"``
+    header (R2.10). Never raises: a download-presign failure degrades
+    gracefully to "no download link" without affecting playback.
+    """
+    try:
+        url = s3.generate_presigned_url(
+            "get_object",
+            Params={
+                "Bucket": bucket,
+                "Key": key,
+                "ResponseContentDisposition": download_disposition(generation_id),
+            },
+            ExpiresIn=PRESIGN_EXPIRY_SECONDS,
+        )
+    except (BotoCoreError, ClientError, Exception):  # noqa: BLE001
+        return None
+    if not isinstance(url, str) or url == "":
+        return None
+    return url
 
 
 # ---------------------------------------------------------------------------
@@ -378,9 +433,22 @@ def _soft_fail(error_label: str) -> SynthesisResult:
     """Return the canonical soft-fail :class:`SynthesisResult`."""
     return SynthesisResult(
         audio_url=None,
+        audio_download_url=None,
         audio_available=False,
         error=error_label,
     )
+
+
+def download_disposition(generation_id: str) -> str:
+    """Build the ``Content-Disposition`` value for the download URL.
+
+    R2.10 mandates an ``attachment`` disposition with a
+    ``dad-joke-<id>.mp3`` filename so a browser saves the audio with a
+    friendly name instead of streaming it inline. Centralized here so
+    both :func:`synthesize` and :func:`presign_audio_url` produce the
+    identical header.
+    """
+    return f'attachment; filename="dad-joke-{generation_id}.mp3"'
 
 
 def _call_polly(
@@ -512,6 +580,7 @@ def presign_audio_url(
     *,
     s3_client: Optional[Any] = None,
     expires_in: int = PRESIGN_EXPIRY_SECONDS,
+    download_generation_id: Optional[str] = None,
 ) -> Optional[str]:
     """Re-presign an S3 audio object key for the audit-replay endpoint.
 
@@ -550,10 +619,17 @@ def presign_audio_url(
         return None
 
     s3 = s3_client if s3_client is not None else _get_default_s3_client()
+    params: dict[str, Any] = {"Bucket": bucket, "Key": key}
+    if download_generation_id is not None:
+        # Download variant (R2.10): force an attachment disposition
+        # with the friendly dad-joke-<id>.mp3 filename.
+        params["ResponseContentDisposition"] = download_disposition(
+            download_generation_id
+        )
     try:
         url = s3.generate_presigned_url(
             "get_object",
-            Params={"Bucket": bucket, "Key": key},
+            Params=params,
             ExpiresIn=expires_in,
         )
     except (BotoCoreError, ClientError, Exception):  # noqa: BLE001

@@ -107,9 +107,26 @@
             >
               Your browser does not support the audio element.
             </audio>
-            <button type="button" id="replay-btn" class="btn btn-secondary">
-              Replay
-            </button>
+            <div class="audio-actions">
+              <button type="button" id="replay-btn" class="btn btn-secondary">
+                Replay
+              </button>
+              <!-- R2.11: download control. href + download filename are
+                   set at render time from the response's audioDownloadUrl.
+                   Rendered as a link (not a button) so it works with the
+                   browser's native "save target" behavior; styled to match
+                   the secondary button. Hidden until a download URL is
+                   present. -->
+              <a
+                id="download-link"
+                class="btn btn-secondary"
+                download
+                hidden
+                rel="noopener"
+              >
+                Download audio
+              </a>
+            </div>
           </div>
         </div>
       </section>

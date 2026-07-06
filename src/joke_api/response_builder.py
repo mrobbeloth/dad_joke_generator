@@ -157,6 +157,7 @@ def build_success(
     remaining: int | None,
     model_id: str,
     voice_id: str,
+    audio_download_url: str | None = None,
 ) -> dict[str, Any]:
     """Build a 200 OK API Gateway-style response for a generated joke.
 
@@ -176,16 +177,24 @@ def build_success(
         model_id: Bedrock model identifier used to generate the joke.
         voice_id: Polly voice identifier used (or that would have been
             used) for synthesis.
+        audio_download_url: Presigned download URL (attachment
+            disposition, ``dad-joke-<id>.mp3`` filename) per R2.10, or
+            ``None`` when no download URL is available. When
+            ``audio_available`` is ``False`` the body field
+            ``audioDownloadUrl`` is forced to ``null`` regardless of
+            this argument's value, mirroring ``audioUrl``.
 
     Returns:
         An API Gateway-style HTTP response dict with ``statusCode`` 200,
         ``Content-Type: application/json`` headers, and a compact JSON
         body matching the design's "Response: 200 OK" contract.
     """
+    download_value = audio_download_url if audio_available else None
     body: dict[str, Any] = {
         "id": joke_id,
         "text": text,
         "audioUrl": audio_url if audio_available else None,
+        "audioDownloadUrl": download_value,
         "audioAvailable": audio_available,
         "modelId": model_id,
         "voiceId": voice_id,
@@ -198,6 +207,7 @@ def build_success(
             "id": joke_id,
             "text": text,
             "audioUrl": audio_url if audio_available else None,
+            "audioDownloadUrl": download_value,
             "audioAvailable": audio_available,
             "remaining": remaining,
             "modelId": model_id,

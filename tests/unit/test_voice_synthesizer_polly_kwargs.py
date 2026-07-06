@@ -251,3 +251,106 @@ def test_polly_not_called_when_text_out_of_range(joke_text: str) -> None:
         f"R2.9 violated: Polly was invoked {len(polly_stub.calls)} time(s) "
         f"for out-of-range text (len={len(joke_text)})."
     )
+
+
+# ---------------------------------------------------------------------------
+# R2.10 / Property 45: download URL variant
+# ---------------------------------------------------------------------------
+
+
+class _RecordingS3Stub:
+    """S3 stub that records every presign call and can be told to fail
+    the Nth presign, so the download-only-failure degradation path can
+    be exercised independently of the playback presign."""
+
+    __slots__ = ("presign_calls", "fail_on_call")
+
+    def __init__(self, fail_on_call: int | None = None) -> None:
+        self.presign_calls: list[dict[str, Any]] = []
+        # 1-indexed call number to fail on; None = never fail.
+        self.fail_on_call = fail_on_call
+
+    def put_object(self, **_kwargs: Any) -> dict[str, Any]:
+        return {}
+
+    def generate_presigned_url(
+        self, ClientMethod: str, **kwargs: Any
+    ) -> str:  # noqa: N803 (boto3 keyword)
+        self.presign_calls.append({"ClientMethod": ClientMethod, **kwargs})
+        if self.fail_on_call is not None and len(self.presign_calls) == self.fail_on_call:
+            raise RuntimeError("presign failed")
+        params = kwargs.get("Params", {})
+        bucket = params.get("Bucket", "")
+        key = params.get("Key", "")
+        disp = params.get("ResponseContentDisposition", "")
+        return (
+            f"https://s3.amazonaws.com/{bucket}/{key}"
+            f"?X-Amz-Expires=900&disp={disp}"
+        )
+
+
+def test_success_returns_download_url_with_attachment_disposition() -> None:
+    """R2.10 / Property 45: a successful synthesis returns a distinct
+    download URL, and exactly one of the two presign calls carries a
+    ``Content-Disposition: attachment; filename="dad-joke-<id>.mp3"``
+    override.
+    """
+    polly_stub = _PollyStub()
+    s3_stub = _RecordingS3Stub()
+
+    result = synthesize(
+        _TEST_JOKE_TEXT,
+        generation_id=_TEST_GENERATION_ID,
+        voice_id="Matthew",
+        audio_bucket=_TEST_BUCKET,
+        polly_client=polly_stub,
+        s3_client=s3_stub,
+    )
+
+    assert result.audio_available is True
+    assert result.audio_url is not None
+    assert result.audio_download_url is not None
+    assert result.audio_url != result.audio_download_url
+
+    # Two presigns: one plain playback, one download with disposition.
+    assert len(s3_stub.presign_calls) == 2
+    dispositions = [
+        c["Params"].get("ResponseContentDisposition")
+        for c in s3_stub.presign_calls
+    ]
+    non_null = [d for d in dispositions if d]
+    assert len(non_null) == 1
+    assert non_null[0] == (
+        f'attachment; filename="dad-joke-{_TEST_GENERATION_ID}.mp3"'
+    )
+
+
+def test_download_presign_failure_degrades_without_breaking_playback() -> None:
+    """When only the download presign fails, playback is unaffected:
+    ``audio_available`` stays True, ``audio_url`` is set, and
+    ``audio_download_url`` is None (R2.10 graceful degradation)."""
+    polly_stub = _PollyStub()
+    # Playback presign is call #1 (succeeds); download presign is call
+    # #2 (fails).
+    s3_stub = _RecordingS3Stub(fail_on_call=2)
+
+    result = synthesize(
+        _TEST_JOKE_TEXT,
+        generation_id=_TEST_GENERATION_ID,
+        voice_id="Matthew",
+        audio_bucket=_TEST_BUCKET,
+        polly_client=polly_stub,
+        s3_client=s3_stub,
+    )
+
+    assert result.audio_available is True
+    assert result.audio_url is not None
+    assert result.audio_download_url is None
+    assert len(s3_stub.presign_calls) == 2
+
+
+def test_download_disposition_helper_shape() -> None:
+    """``download_disposition`` produces the exact attachment header
+    string R2.10 mandates."""
+    disp = voice_synthesizer.download_disposition("xyz-1")
+    assert disp == 'attachment; filename="dad-joke-xyz-1.mp3"'

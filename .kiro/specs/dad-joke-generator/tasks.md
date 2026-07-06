@@ -361,9 +361,28 @@ This plan converts the design into incremental, code-focused steps. Each task pr
 - [x] 18. Final checkpoint - end-to-end verification
   - Ensure all tests pass, ask the user if questions arise.
 
+- [x] 19. Downloadable joke audio (R2.10, R2.11) — post-Phase-1 enhancement
+  - [x] 19.1 Add a download-variant presigned URL to `voice_synthesizer`
+    - `synthesize` mints a second presigned GET URL with `ResponseContentDisposition = attachment; filename="dad-joke-<id>.mp3"`; add `audio_download_url` to `SynthesisResult`; degrade to `None` if only the download presign fails
+    - Extend `presign_audio_url` with a `download_generation_id` param for the `GET /v1/jokes/{id}` audit path
+    - _Requirements: 2.10_
+
+  - [x] 19.2 Thread `audioDownloadUrl` through `response_builder` + `handler`
+    - `build_success` gains an `audio_download_url` param (forced to `null` when `audio_available` is `false`); POST and GET-by-id paths pass it through; `_re_presign_audio_ref` returns the download URL too
+    - _Requirements: 2.10_
+
+  - [x] 19.3 Add the frontend download control
+    - `api.ts` `JokeApiSuccess.audioDownloadUrl`; `index.html` download link; `main.ts` `renderDownloadLink` (sets href + `download` filename, hides when null or audio unavailable); styles for `.audio-actions` + `.btn[hidden]`
+    - _Requirements: 2.11_
+
+  - [x]* 19.4 Tests for the download feature
+    - **Property 45: Audio download URL carries an attachment disposition**
+    - voice_synthesizer unit + property (disposition, degradation), response_builder/handler flow-through, frontend component (visible/hidden)
+    - **Validates: Requirements 2.10, 2.11**
+
 ## Notes
 
-- Tasks marked with `*` are optional and can be skipped for a faster MVP, but every Correctness Property test (1..44) must be implemented before a production deployment per the Test_Plan.
+- Tasks marked with `*` are optional and can be skipped for a faster MVP, but every Correctness Property test (1..45) must be implemented before a production deployment per the Test_Plan.
 - Each task references specific granular requirement clauses (e.g., 5.4) for traceability rather than just user-story numbers.
 - Property test sub-tasks are placed adjacent to the implementation they verify so failures are caught at the earliest possible point.
 - Checkpoints provide explicit pause points for human review before crossing major architectural boundaries (utilities → backend pipeline → frontend → IaC).

@@ -360,7 +360,11 @@ def test_property_6_outcome_drives_audio_available_and_url(
         assert result.error is None
         assert len(polly_stub.calls) == 1
         assert len(s3_stub.put_calls) == 1
-        assert len(s3_stub.presign_calls) == 1
+        # R2.10: success presigns twice (playback + download variant).
+        assert len(s3_stub.presign_calls) == 2
+        # The download variant is present and carries the attachment
+        # disposition (Property 45).
+        assert result.audio_download_url is not None
         return
 
     # Failure modes (in-range, fast-execution).
@@ -466,16 +470,35 @@ def test_property_7_presigned_url_expires_at_least_900_seconds(
 
     assert result.audio_available is True
     assert result.audio_url is not None
-    assert len(s3_stub.presign_calls) == 1
+    # R2.10: a successful synthesis now presigns TWICE -- once for the
+    # inline playback URL and once for the download variant (with a
+    # ResponseContentDisposition override). Both must honor the >= 900 s
+    # expiry (Property 7 / Property 45).
+    assert len(s3_stub.presign_calls) == 2
 
-    # Captured ``ExpiresIn`` argument.
-    presign_call = s3_stub.presign_calls[0]
-    expires_in_kwarg = presign_call["ExpiresIn"]
-    assert isinstance(expires_in_kwarg, int)
-    assert expires_in_kwarg >= 900, (
-        f"Property 7 violated: ExpiresIn kwarg was {expires_in_kwarg}, "
-        f"must be >= 900 seconds (15 minutes)."
+    # Every captured ``ExpiresIn`` argument must be >= 900 s.
+    for presign_call in s3_stub.presign_calls:
+        expires_in_kwarg = presign_call["ExpiresIn"]
+        assert isinstance(expires_in_kwarg, int)
+        assert expires_in_kwarg >= 900, (
+            f"Property 7 violated: ExpiresIn kwarg was {expires_in_kwarg}, "
+            f"must be >= 900 seconds (15 minutes)."
+        )
+
+    # Exactly one of the two presign calls carries the attachment
+    # disposition (the download variant); the other is plain playback.
+    disposition_calls = [
+        c
+        for c in s3_stub.presign_calls
+        if "ResponseContentDisposition" in c.get("Params", {})
+    ]
+    assert len(disposition_calls) == 1, (
+        "Property 45: exactly one presign call must set "
+        "ResponseContentDisposition (the download variant)."
     )
+    disposition = disposition_calls[0]["Params"]["ResponseContentDisposition"]
+    assert disposition.startswith("attachment; filename=\"dad-joke-")
+    assert disposition.endswith(".mp3\"")
 
     # URL-level assertion: parse the X-Amz-Expires query parameter.
     parsed = urlparse(result.audio_url)

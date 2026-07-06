@@ -245,6 +245,15 @@ body {
   border: 2px solid transparent;
   border-radius: var(--radius);
   cursor: pointer;
+  /* The download control is an <a class="btn">; strip the underline so
+     it reads as a button, not a text link. */
+  text-decoration: none;
+}
+
+/* `hidden` must win over the .btn display:inline-flex (R2.11 download
+   link toggles via the hidden attribute). */
+.btn[hidden] {
+  display: none;
 }
 
 .btn-primary {
@@ -368,6 +377,14 @@ body {
 
 .audio-controls[hidden] {
   display: none;
+}
+
+/* Row holding the Replay button and the Download link (R2.5, R2.11). */
+.audio-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
 }
 
 .joke-audio {
